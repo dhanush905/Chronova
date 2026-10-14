@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/sample_data.dart';
+import '../../data/chronova_data_store.dart';
 import '../../models/event_item.dart';
 import '../../widgets/custom_card.dart';
+import '../../widgets/event_editor_sheet.dart';
 import '../../widgets/responsive_container.dart';
 import '../../widgets/status_badge.dart';
 
@@ -17,24 +18,20 @@ class CalendarScreen extends StatefulWidget {
 
 class _CalendarScreenState extends State<CalendarScreen> {
   late DateTime _selectedDate;
-  late List<EventItem> _allEvents;
-  late List<EventCategory> _categories;
   String? _selectedCategoryId;
   String _searchQuery = '';
   final bool _isLoading = false;
-  String? _errorMessage;
+  final String? _errorMessage = null;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _selectedDate = DateTime(now.year, now.month, now.day);
-    _allEvents = SampleData.getSampleEvents();
-    _categories = List.from(SampleData.categories);
   }
 
-  List<EventItem> get _filteredEvents {
-    return _allEvents.where((event) {
+  List<EventItem> _getFilteredEvents(List<EventItem> allEvents) {
+    return allEvents.where((event) {
       // Check date matching (ignoring time)
       final eventDay = DateTime(
         event.startTime.year,
@@ -61,200 +58,129 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }).toList();
   }
 
-  void _showAddEventDialog() {
-    final titleController = TextEditingController();
-    final locationController = TextEditingController();
-    EventCategory selectedCategory = _categories.first;
-    DateTime startTime = _selectedDate.add(const Duration(hours: 10));
-    DateTime endTime = _selectedDate.add(const Duration(hours: 11));
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 20,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'New Calendar Event',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: titleController,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Event Title',
-                    hintText: 'e.g. Design review with team',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: locationController,
-                  decoration: const InputDecoration(
-                    labelText: 'Location / Link (Optional)',
-                    hintText: 'e.g. Google Meet or Conference Room',
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Customizable Category',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _categories.map((cat) {
-                    final isChosen = cat.id == selectedCategory.id;
-                    return ChoiceChip(
-                      label: Text(cat.name),
-                      selected: isChosen,
-                      selectedColor: cat.color.withAlpha(40),
-                      backgroundColor: AppColors.surfaceVariant,
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isChosen
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        color: isChosen ? cat.color : AppColors.textSecondary,
-                      ),
-                      side: BorderSide(
-                        color: isChosen ? cat.color : AppColors.border,
-                      ),
-                      onSelected: (selected) {
-                        if (selected) {
-                          setModalState(() {
-                            selectedCategory = cat;
-                          });
-                        }
-                      },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (titleController.text.trim().isEmpty) return;
-
-                      setState(() {
-                        _allEvents.add(
-                          EventItem(
-                            id: 'evt-${DateTime.now().millisecondsSinceEpoch}',
-                            title: titleController.text.trim(),
-                            category: selectedCategory,
-                            startTime: startTime,
-                            endTime: endTime,
-                            location: locationController.text.trim(),
-                          ),
-                        );
-                      });
-
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Event scheduled successfully'),
-                          backgroundColor: AppColors.primary,
-                        ),
-                      );
-                    },
-                    child: const Text('Save Event'),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
+  Future<void> _showAddEventDialog() async {
+    final newEvent = await EventEditorSheet.show(
+      context,
+      initialDate: _selectedDate,
     );
+
+    if (newEvent != null && mounted) {
+      ChronovaDataStore.instance.addEvent(newEvent);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event scheduled successfully'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    }
   }
 
-  void _deleteEvent(String id) {
-    setState(() {
-      _allEvents.removeWhere((e) => e.id == id);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Event deleted'),
-        duration: Duration(seconds: 2),
+  Future<void> _showEditEventDialog(EventItem event) async {
+    final updatedEvent = await EventEditorSheet.show(
+      context,
+      initialEvent: event,
+    );
+
+    if (updatedEvent != null && mounted) {
+      ChronovaDataStore.instance.updateEvent(updatedEvent);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event updated successfully'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteEvent(EventItem event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Delete Event',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: Text('Are you sure you want to delete "${event.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
+
+    if (confirmed == true && mounted) {
+      ChronovaDataStore.instance.deleteEvent(event.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event deleted'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final monthYearStr = DateFormat('MMMM y').format(_selectedDate);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        onPressed: _showAddEventDialog,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New Event'),
-      ),
-      body: SafeArea(
-        child: ResponsiveContainer(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top Bar with Month Navigation
-              _buildMonthNavigator(monthYearStr),
-              const SizedBox(height: 14),
+    return ListenableBuilder(
+      listenable: ChronovaDataStore.instance,
+      builder: (context, _) {
+        final store = ChronovaDataStore.instance;
+        final categories = store.categories;
+        final filteredEvents = _getFilteredEvents(store.events);
 
-              // Date Selector Strip (Day selector)
-              _buildDateStrip(),
-              const SizedBox(height: 16),
-
-              // Search Bar
-              _buildSearchBar(),
-              const SizedBox(height: 12),
-
-              // Category Filter Chips
-              _buildCategoryChips(),
-              const SizedBox(height: 14),
-
-              // Event List Area with state handling
-              Expanded(child: _buildEventListArea()),
-            ],
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          floatingActionButton: FloatingActionButton.extended(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            elevation: 4,
+            onPressed: _showAddEventDialog,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('New Event'),
           ),
-        ),
-      ),
+          body: SafeArea(
+            child: ResponsiveContainer(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top Bar with Month Navigation
+                  _buildMonthNavigator(monthYearStr),
+                  const SizedBox(height: 14),
+
+                  // Date Selector Strip (Day selector)
+                  _buildDateStrip(),
+                  const SizedBox(height: 16),
+
+                  // Search Bar
+                  _buildSearchBar(),
+                  const SizedBox(height: 12),
+
+                  // Category Filter Chips
+                  _buildCategoryChips(categories),
+                  const SizedBox(height: 14),
+
+                  // Event List Area with state handling
+                  Expanded(child: _buildEventListArea(filteredEvents)),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -326,7 +252,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildDateStrip() {
-    // Show 7 days around selected date
     final startOfWeek = _selectedDate.subtract(
       Duration(days: _selectedDate.weekday - 1),
     );
@@ -436,7 +361,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildCategoryChips() {
+  Widget _buildCategoryChips(List<EventCategory> categories) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -469,7 +394,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               }
             },
           ),
-          ..._categories.map((category) {
+          ...categories.map((category) {
             final isSelected = _selectedCategoryId == category.id;
             return Padding(
               padding: const EdgeInsets.only(left: 8),
@@ -499,7 +424,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Widget _buildEventListArea() {
+  Widget _buildEventListArea(List<EventItem> events) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -516,15 +441,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              _errorMessage!,
+              _errorMessage,
               style: const TextStyle(color: AppColors.danger),
             ),
           ],
         ),
       );
     }
-
-    final events = _filteredEvents;
 
     if (events.isEmpty) {
       return Center(
@@ -582,6 +505,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: CustomCard(
+            onTap: () => _showEditEventDialog(event),
             padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -678,8 +602,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   onSelected: (val) {
-                    if (val == 'delete') {
-                      _deleteEvent(event.id);
+                    if (val == 'edit') {
+                      _showEditEventDialog(event);
+                    } else if (val == 'delete') {
+                      _confirmDeleteEvent(event);
                     }
                   },
                   itemBuilder: (context) => [

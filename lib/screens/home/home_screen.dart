@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/sample_data.dart';
+import '../../data/chronova_data_store.dart';
 import '../../models/event_item.dart';
 import '../../models/reminder_item.dart';
 import '../../models/note_item.dart';
 import '../../models/file_item.dart';
 import '../../widgets/custom_card.dart';
+import '../../widgets/event_editor_sheet.dart';
+import '../../widgets/note_editor_sheet.dart';
 import '../../widgets/responsive_container.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/status_badge.dart';
@@ -22,32 +24,95 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late List<EventItem> _events;
-  late List<ReminderItem> _reminders;
-  late List<NoteItem> _notes;
-  late List<FileItem> _files;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSampleData();
-  }
-
-  void _loadSampleData() {
-    _events = SampleData.getSampleEvents();
-    _reminders = SampleData.getSampleReminders();
-    _notes = SampleData.getSampleNotes();
-    _files = SampleData.getSampleFiles();
-  }
-
   void _toggleReminder(String reminderId) {
-    setState(() {
-      final index = _reminders.indexWhere((r) => r.id == reminderId);
-      if (index != -1) {
-        final current = _reminders[index];
-        _reminders[index] = current.copyWith(isDone: !current.isDone);
-      }
-    });
+    ChronovaDataStore.instance.toggleReminder(reminderId);
+  }
+
+  Future<void> _addNewEvent() async {
+    final newEvent = await EventEditorSheet.show(context);
+    if (newEvent != null && mounted) {
+      ChronovaDataStore.instance.addEvent(newEvent);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event scheduled successfully'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    }
+  }
+
+  Future<void> _editEvent(EventItem event) async {
+    final updatedEvent = await EventEditorSheet.show(
+      context,
+      initialEvent: event,
+    );
+    if (updatedEvent != null && mounted) {
+      ChronovaDataStore.instance.updateEvent(updatedEvent);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event updated successfully'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteEvent(EventItem event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Delete Event',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: Text('Are you sure you want to delete "${event.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      ChronovaDataStore.instance.deleteEvent(event.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event deleted'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _addNewNote() async {
+    final newNote = await NoteEditorSheet.show(context);
+    if (newNote != null && mounted) {
+      ChronovaDataStore.instance.addNote(newNote);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Note created successfully')),
+      );
+    }
+  }
+
+  Future<void> _editNote(NoteItem note) async {
+    final updatedNote = await NoteEditorSheet.show(context, initialNote: note);
+    if (updatedNote != null && mounted) {
+      ChronovaDataStore.instance.updateNote(updatedNote);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Note updated successfully')),
+      );
+    }
   }
 
   void _showQuickActionDialog(String title, String message) {
@@ -72,65 +137,86 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final dateFormatted = DateFormat('EEEE, MMMM d, y').format(now);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: ResponsiveContainer(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top App Bar / Greeting
-                _buildHeader(dateFormatted),
-                const SizedBox(height: 20),
+    return ListenableBuilder(
+      listenable: ChronovaDataStore.instance,
+      builder: (context, _) {
+        final store = ChronovaDataStore.instance;
+        final events = store.events;
+        final reminders = store.reminders;
+        final notes = store.notes;
+        final files = store.files;
 
-                // Quick Overview Metrics
-                _buildMetricsGrid(),
-                const SizedBox(height: 24),
-
-                // Quick Actions
-                _buildQuickActionsRow(),
-                const SizedBox(height: 28),
-
-                // Today's Schedule Section
-                SectionHeader(
-                  title: "Today's Schedule",
-                  subtitle: '${_events.length} planned activities',
-                  actionLabel: 'Calendar',
-                  onAction: () => widget.onNavigateToTab?.call(1),
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: ResponsiveContainer(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 20,
                 ),
-                const SizedBox(height: 8),
-                _buildTodaySchedule(),
-                const SizedBox(height: 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top App Bar / Greeting
+                    _buildHeader(dateFormatted),
+                    const SizedBox(height: 20),
 
-                // Priority Reminders Section
-                SectionHeader(
-                  title: 'Priority Reminders',
-                  subtitle: 'Upcoming notifications & alerts',
-                  actionLabel: 'View All',
-                  onAction: () => widget.onNavigateToTab?.call(1),
-                ),
-                const SizedBox(height: 8),
-                _buildRemindersList(),
-                const SizedBox(height: 28),
+                    // Quick Overview Metrics
+                    _buildMetricsGrid(
+                      eventsCount: events.length,
+                      activeRemindersCount: reminders
+                          .where((r) => !r.isDone)
+                          .length,
+                      notesCount: notes.length,
+                      filesCount: files.length,
+                    ),
+                    const SizedBox(height: 24),
 
-                // Recent Notes & Synced Files
-                SectionHeader(
-                  title: 'Recent Notes & Documents',
-                  subtitle: 'Quick access to your captured knowledge',
-                  actionLabel: 'Files Hub',
-                  onAction: () => widget.onNavigateToTab?.call(2),
+                    // Quick Actions
+                    _buildQuickActionsRow(),
+                    const SizedBox(height: 28),
+
+                    // Today's Schedule Section
+                    SectionHeader(
+                      title: "Today's Schedule",
+                      subtitle: '${events.length} planned activities',
+                      actionLabel: 'Calendar',
+                      onAction: () => widget.onNavigateToTab?.call(1),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTodaySchedule(events),
+                    const SizedBox(height: 28),
+
+                    // Priority Reminders Section
+                    SectionHeader(
+                      title: 'Priority Reminders',
+                      subtitle: 'Upcoming notifications & alerts',
+                      actionLabel: 'View All',
+                      onAction: () => widget.onNavigateToTab?.call(1),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildRemindersList(reminders),
+                    const SizedBox(height: 28),
+
+                    // Recent Notes & Synced Files
+                    SectionHeader(
+                      title: 'Recent Notes & Documents',
+                      subtitle: 'Quick access to your captured knowledge',
+                      actionLabel: 'Files Hub',
+                      onAction: () => widget.onNavigateToTab?.call(2),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildRecentNotesAndFiles(notes, files),
+                    const SizedBox(height: 32),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                _buildRecentNotesAndFiles(),
-                const SizedBox(height: 32),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -199,7 +285,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMetricsGrid() {
+  Widget _buildMetricsGrid({
+    required int eventsCount,
+    required int activeRemindersCount,
+    required int notesCount,
+    required int filesCount,
+  }) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = (constraints.maxWidth - 12) / 2;
@@ -211,7 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: cardWidth,
               child: _buildMetricCard(
                 title: 'Upcoming Events',
-                count: '${_events.length}',
+                count: '$eventsCount',
                 icon: Icons.calendar_month_rounded,
                 iconColor: AppColors.primary,
                 iconBg: AppColors.primaryContainer,
@@ -221,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: cardWidth,
               child: _buildMetricCard(
                 title: 'Active Reminders',
-                count: '${_reminders.where((r) => !r.isDone).length}',
+                count: '$activeRemindersCount',
                 icon: Icons.notifications_active_rounded,
                 iconColor: AppColors.catViolet,
                 iconBg: AppColors.catViolet.withAlpha(25),
@@ -231,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: cardWidth,
               child: _buildMetricCard(
                 title: 'Organized Notes',
-                count: '${_notes.length}',
+                count: '$notesCount',
                 icon: Icons.note_alt_rounded,
                 iconColor: AppColors.catEmerald,
                 iconBg: AppColors.catEmerald.withAlpha(25),
@@ -241,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: cardWidth,
               child: _buildMetricCard(
                 title: 'Imported Files',
-                count: '${_files.length}',
+                count: '$filesCount',
                 icon: Icons.folder_shared_rounded,
                 iconColor: AppColors.catSky,
                 iconBg: AppColors.catSky.withAlpha(25),
@@ -310,9 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Add Event',
             icon: Icons.add_rounded,
             isPrimary: true,
-            onTap: () {
-              widget.onNavigateToTab?.call(1);
-            },
+            onTap: _addNewEvent,
           ),
           const SizedBox(width: 10),
           _buildActionButton(
@@ -329,9 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildActionButton(
             label: 'New Note',
             icon: Icons.edit_note_rounded,
-            onTap: () {
-              widget.onNavigateToTab?.call(2);
-            },
+            onTap: _addNewNote,
           ),
           const SizedBox(width: 10),
           _buildActionButton(
@@ -397,8 +484,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTodaySchedule() {
-    if (_events.isEmpty) {
+  Widget _buildTodaySchedule(List<EventItem> events) {
+    if (events.isEmpty) {
       return const CustomCard(
         child: Center(
           child: Padding(
@@ -413,7 +500,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Column(
-      children: _events.take(3).map((event) {
+      children: events.take(3).map((event) {
         final timeFormat = DateFormat('h:mm a');
         final timeStr =
             '${timeFormat.format(event.startTime)} - ${timeFormat.format(event.endTime)}';
@@ -421,6 +508,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: CustomCard(
+            onTap: () => _editEvent(event),
             padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -498,6 +586,52 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
+                PopupMenuButton<String>(
+                  icon: const Icon(
+                    Icons.more_vert_rounded,
+                    color: AppColors.textTertiary,
+                    size: 20,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  onSelected: (val) {
+                    if (val == 'edit') {
+                      _editEvent(event);
+                    } else if (val == 'delete') {
+                      _confirmDeleteEvent(event);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: AppColors.danger,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete',
+                            style: TextStyle(color: AppColors.danger),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -506,9 +640,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRemindersList() {
+  Widget _buildRemindersList(List<ReminderItem> reminders) {
     return Column(
-      children: _reminders.map((reminder) {
+      children: reminders.map((reminder) {
         final timeFormat = DateFormat('h:mm a, MMM d');
         final formattedDue = timeFormat.format(reminder.dueDateTime);
 
@@ -597,13 +731,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRecentNotesAndFiles() {
+  Widget _buildRecentNotesAndFiles(List<NoteItem> notes, List<FileItem> files) {
     return Column(
       children: [
         // Note snippet card
-        if (_notes.isNotEmpty)
+        if (notes.isNotEmpty)
           CustomCard(
-            onTap: () => widget.onNavigateToTab?.call(2),
+            onTap: () => _editNote(notes.first),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -628,7 +762,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              _notes.first.title,
+                              notes.first.title,
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
@@ -637,7 +771,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           StatusBadge(
-                            label: _notes.first.folder,
+                            label: notes.first.folder,
                             color: AppColors.primary,
                             fontSize: 10,
                           ),
@@ -645,7 +779,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        _notes.first.content,
+                        notes.first.content,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -662,7 +796,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         const SizedBox(height: 10),
         // File snippet card
-        if (_files.isNotEmpty)
+        if (files.isNotEmpty)
           CustomCard(
             onTap: () => widget.onNavigateToTab?.call(2),
             child: Row(
@@ -670,12 +804,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: _files.first.fileType.color.withAlpha(30),
+                    color: files.first.fileType.color.withAlpha(30),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    _files.first.fileType.icon,
-                    color: _files.first.fileType.color,
+                    files.first.fileType.icon,
+                    color: files.first.fileType.color,
                     size: 22,
                   ),
                 ),
@@ -685,7 +819,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _files.first.name,
+                        files.first.name,
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -694,7 +828,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${_files.first.fileType.label} • ${_files.first.sizeString} • ${_files.first.linkedEventsCount} linked events',
+                        '${files.first.fileType.label} • ${files.first.sizeString} • ${files.first.linkedEventsCount} linked events',
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,

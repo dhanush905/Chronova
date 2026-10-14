@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2026-10-15 (Event & Notepad Functionality Fixes)
+
+### Fixed
+- **Event Editing Flow**:
+  - Implemented `EventEditorSheet` providing prefilled fields (title, description, location, category, date, and start/end times).
+  - Wired unhandled `Edit` popup menu and tap callbacks in both `CalendarScreen` and `HomeScreen`.
+  - Added input validation ensuring non-empty titles with descriptive error messages.
+  - Added date picker (`showDatePicker`) and time pickers (`showTimePicker`) with duration consistency.
+  - Ensured edits preserve the event's original ID without creating duplicate entries.
+  - Added Cancel action that safely discards edits without modifying the original event.
+- **Notepad & Note Editing**:
+  - Created `NoteEditorSheet` enabling full edit mode with prefilled title and content.
+  - Provided isolated `TextEditingController` instances per sheet session with proper disposal.
+  - Added tap-to-edit and more-menu actions on note cards in `NotesFilesScreen` and `HomeScreen`.
+  - Added input validation for note titles.
+  - Preserved folder categories, attachment indicators, and pinned status during editing.
+- **State Management & Cross-Screen Synchronization**:
+  - Introduced `ChronovaDataStore` as the single source of truth for in-memory session data.
+  - Connected `HomeScreen`, `CalendarScreen`, `NotesFilesScreen`, and `ProfileSettingsScreen` via Flutter's `ListenableBuilder`.
+  - Fixed cross-screen divergence where edits on one screen were not reflected on others.
+- **Delete Confirmation Safeguards**:
+  - Added confirmation dialogs before deleting events or notes to prevent accidental removals.
+- **Layout & Overflow Prevention**:
+  - Redesigned date and time picker rows in `EventEditorSheet` to eliminate flex layout overflows on narrow mobile screens.
+
+### Added
+- **Unit & Widget Test Suites**:
+  - Added unit test suite in `test/chronova_data_store_test.dart` testing event and note creation, in-place updates, and deletions.
+  - Expanded `test/widget_test.dart` with end-to-end tests verifying the complete event and note creation, editing, cancellation, and confirmed deletion flows.
+
+---
+
 ## [1.0.0] - 2026-10-14 (Phase 1 Baseline)
 
 ### Added

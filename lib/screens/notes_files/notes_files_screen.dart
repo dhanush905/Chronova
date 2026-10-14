@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/sample_data.dart';
+import '../../data/chronova_data_store.dart';
 import '../../models/note_item.dart';
 import '../../models/file_item.dart';
 import '../../widgets/custom_card.dart';
+import '../../widgets/note_editor_sheet.dart';
 import '../../widgets/responsive_container.dart';
 import '../../widgets/status_badge.dart';
 
@@ -20,8 +21,6 @@ class NotesFilesScreen extends StatefulWidget {
 class _NotesFilesScreenState extends State<NotesFilesScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late List<NoteItem> _notes;
-  late List<FileItem> _files;
   String? _selectedFolder;
   String _noteSearchQuery = '';
   String _fileSearchQuery = '';
@@ -30,8 +29,6 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _notes = SampleData.getSampleNotes();
-    _files = SampleData.getSampleFiles();
   }
 
   @override
@@ -40,16 +37,28 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
     super.dispose();
   }
 
-  List<String> get _folders {
+  List<String> _getFolders(List<NoteItem> notes) {
     final set = <String>{'All'};
-    for (var n in _notes) {
-      set.add(n.folder);
+    for (var n in notes) {
+      if (n.folder.isNotEmpty) {
+        set.add(n.folder);
+      }
     }
     return set.toList();
   }
 
-  List<NoteItem> get _filteredNotes {
-    return _notes.where((note) {
+  List<String> _getFoldersWithoutAll(List<NoteItem> notes) {
+    final set = <String>{'Work', 'Architecture', 'Personal', 'Ideas'};
+    for (var n in notes) {
+      if (n.folder.isNotEmpty) {
+        set.add(n.folder);
+      }
+    }
+    return set.toList();
+  }
+
+  List<NoteItem> _getFilteredNotes(List<NoteItem> allNotes) {
+    return allNotes.where((note) {
       final matchesFolder =
           _selectedFolder == null ||
           _selectedFolder == 'All' ||
@@ -62,8 +71,8 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
     }).toList();
   }
 
-  List<FileItem> get _filteredFiles {
-    return _files.where((file) {
+  List<FileItem> _getFilteredFiles(List<FileItem> allFiles) {
+    return allFiles.where((file) {
       return _fileSearchQuery.isEmpty ||
           file.name.toLowerCase().contains(_fileSearchQuery.toLowerCase()) ||
           file.fileType.label.toLowerCase().contains(
@@ -72,94 +81,74 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
     }).toList();
   }
 
-  void _showNewNoteDialog() {
-    final titleCtrl = TextEditingController();
-    final contentCtrl = TextEditingController();
-    String folder = 'Work';
+  Future<void> _showNewNoteDialog(List<String> availableFolders) async {
+    final newNote = await NoteEditorSheet.show(
+      context,
+      availableFolders: availableFolders,
+    );
 
-    showModalBottomSheet(
+    if (newNote != null && mounted) {
+      ChronovaDataStore.instance.addNote(newNote);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Note created successfully')),
+      );
+    }
+  }
+
+  Future<void> _showEditNoteDialog(
+    NoteItem note,
+    List<String> availableFolders,
+  ) async {
+    final updatedNote = await NoteEditorSheet.show(
+      context,
+      initialNote: note,
+      availableFolders: availableFolders,
+    );
+
+    if (updatedNote != null && mounted) {
+      ChronovaDataStore.instance.updateNote(updatedNote);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Note updated successfully')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteNote(NoteItem note) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 20,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Delete Note',
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Create Note',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
+        content: Text('Are you sure you want to delete "${note.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: titleCtrl,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Note Title',
-                hintText: 'e.g. Project Brainstorm',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: contentCtrl,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Content',
-                hintText: 'Type your thoughts, meeting notes, or ideas...',
-              ),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  if (titleCtrl.text.trim().isEmpty) return;
-                  setState(() {
-                    _notes.insert(
-                      0,
-                      NoteItem(
-                        id: 'note-${DateTime.now().millisecondsSinceEpoch}',
-                        title: titleCtrl.text.trim(),
-                        content: contentCtrl.text.trim(),
-                        folder: folder,
-                        updatedAt: DateTime.now(),
-                      ),
-                    );
-                  });
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Note created successfully')),
-                  );
-                },
-                child: const Text('Save Note'),
-              ),
-            ),
-          ],
-        ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
+
+    if (confirmed == true && mounted) {
+      ChronovaDataStore.instance.deleteNote(note.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Note deleted'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _showImportPreviewDialog() {
@@ -278,110 +267,126 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      floatingActionButton: _tabController.index == 0
-          ? FloatingActionButton.extended(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              elevation: 4,
-              onPressed: _showNewNoteDialog,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('New Note'),
-            )
-          : FloatingActionButton.extended(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              elevation: 4,
-              onPressed: _showImportPreviewDialog,
-              icon: const Icon(Icons.file_upload_outlined),
-              label: const Text('Import File'),
+    return ListenableBuilder(
+      listenable: ChronovaDataStore.instance,
+      builder: (context, _) {
+        final store = ChronovaDataStore.instance;
+        final notes = _getFilteredNotes(store.notes);
+        final files = _getFilteredFiles(store.files);
+        final folders = _getFolders(store.notes);
+        final foldersWithoutAll = _getFoldersWithoutAll(store.notes);
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          floatingActionButton: _tabController.index == 0
+              ? FloatingActionButton.extended(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 4,
+                  onPressed: () => _showNewNoteDialog(foldersWithoutAll),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('New Note'),
+                )
+              : FloatingActionButton.extended(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 4,
+                  onPressed: _showImportPreviewDialog,
+                  icon: const Icon(Icons.file_upload_outlined),
+                  label: const Text('Import File'),
+                ),
+          body: SafeArea(
+            child: ResponsiveContainer(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  const Text(
+                    'Notes & Files',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Segmented Tabs
+                  Container(
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicator: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.primary,
+                      ),
+                      labelColor: Colors.white,
+                      unselectedLabelColor: AppColors.textSecondary,
+                      labelStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      onTap: (index) {
+                        setState(() {});
+                      },
+                      tabs: const [
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.edit_note_rounded, size: 18),
+                              SizedBox(width: 8),
+                              Text('Notes'),
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.folder_shared_rounded, size: 18),
+                              SizedBox(width: 8),
+                              Text('Files & Import'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Tab View Content
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildNotesTab(notes, folders, foldersWithoutAll),
+                        _buildFilesTab(files),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-      body: SafeArea(
-        child: ResponsiveContainer(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              const Text(
-                'Notes & Files',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Segmented Tabs
-              Container(
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicator: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: AppColors.primary,
-                  ),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: AppColors.textSecondary,
-                  labelStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  onTap: (index) {
-                    setState(() {});
-                  },
-                  tabs: const [
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.edit_note_rounded, size: 18),
-                          SizedBox(width: 8),
-                          Text('Notes'),
-                        ],
-                      ),
-                    ),
-                    Tab(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.folder_shared_rounded, size: 18),
-                          SizedBox(width: 8),
-                          Text('Files & Import'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Tab View Content
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [_buildNotesTab(), _buildFilesTab()],
-                ),
-              ),
-            ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildNotesTab() {
-    final notes = _filteredNotes;
-
+  Widget _buildNotesTab(
+    List<NoteItem> notes,
+    List<String> folders,
+    List<String> foldersWithoutAll,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -392,12 +397,22 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
               _noteSearchQuery = val;
             });
           },
-          decoration: const InputDecoration(
-            hintText: 'Search notes by keyword...',
-            prefixIcon: Icon(
+          decoration: InputDecoration(
+            hintText: 'Search notes by title or content...',
+            prefixIcon: const Icon(
               Icons.search_rounded,
               color: AppColors.textSecondary,
             ),
+            suffixIcon: _noteSearchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear_rounded, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        _noteSearchQuery = '';
+                      });
+                    },
+                  )
+                : null,
             filled: true,
             fillColor: AppColors.surface,
           ),
@@ -409,7 +424,7 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
           child: Row(
-            children: _folders.map((folder) {
+            children: folders.map((folder) {
               final isSelected = (_selectedFolder ?? 'All') == folder;
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
@@ -484,6 +499,8 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: CustomCard(
+                        onTap: () =>
+                            _showEditNoteDialog(note, foldersWithoutAll),
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -512,6 +529,58 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
                                   label: note.folder,
                                   color: AppColors.primary,
                                   fontSize: 10,
+                                ),
+                                const SizedBox(width: 4),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(
+                                    Icons.more_vert_rounded,
+                                    color: AppColors.textTertiary,
+                                    size: 18,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  onSelected: (val) {
+                                    if (val == 'edit') {
+                                      _showEditNoteDialog(
+                                        note,
+                                        foldersWithoutAll,
+                                      );
+                                    } else if (val == 'delete') {
+                                      _confirmDeleteNote(note);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit_outlined, size: 18),
+                                          SizedBox(width: 8),
+                                          Text('Edit'),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.delete_outline,
+                                            size: 18,
+                                            color: AppColors.danger,
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'Delete',
+                                            style: TextStyle(
+                                              color: AppColors.danger,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -571,9 +640,7 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
     );
   }
 
-  Widget _buildFilesTab() {
-    final files = _filteredFiles;
-
+  Widget _buildFilesTab(List<FileItem> files) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

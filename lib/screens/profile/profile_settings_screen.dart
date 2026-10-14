@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/sample_data.dart';
+import '../../data/chronova_data_store.dart';
 import '../../models/event_item.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/responsive_container.dart';
@@ -18,7 +18,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   bool _notificationsEnabled = true;
   bool _offlineCacheEnabled = true;
   String _selectedSnooze = '10 min';
-  final List<EventCategory> _categories = List.from(SampleData.categories);
 
   void _showAddCategoryDialog() {
     final catNameCtrl = TextEditingController();
@@ -110,15 +109,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             ElevatedButton(
               onPressed: () {
                 if (catNameCtrl.text.trim().isEmpty) return;
-                setState(() {
-                  _categories.add(
-                    EventCategory(
-                      id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
-                      name: catNameCtrl.text.trim(),
-                      color: selectedColor,
-                    ),
-                  );
-                });
+                ChronovaDataStore.instance.addCategory(
+                  EventCategory(
+                    id: 'cat-${DateTime.now().millisecondsSinceEpoch}',
+                    name: catNameCtrl.text.trim(),
+                    color: selectedColor,
+                  ),
+                );
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Custom category added')),
@@ -134,63 +131,73 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: ResponsiveContainer(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Profile & Settings',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
+    return ListenableBuilder(
+      listenable: ChronovaDataStore.instance,
+      builder: (context, _) {
+        final categories = ChronovaDataStore.instance.categories;
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: ResponsiveContainer(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 20,
                 ),
-                const SizedBox(height: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Profile & Settings',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                // User Profile Card
-                _buildProfileCard(),
-                const SizedBox(height: 24),
+                    // User Profile Card
+                    _buildProfileCard(),
+                    const SizedBox(height: 24),
 
-                // Section: Cloud Sync & Storage
-                _buildSectionTitle('Cloud & Synchronization'),
-                const SizedBox(height: 10),
-                _buildCloudSyncCard(),
-                const SizedBox(height: 24),
+                    // Section: Cloud Sync & Storage
+                    _buildSectionTitle('Cloud & Synchronization'),
+                    const SizedBox(height: 10),
+                    _buildCloudSyncCard(),
+                    const SizedBox(height: 24),
 
-                // Section: Customizable Categories
-                _buildSectionTitle(
-                  'Event Categories',
-                  actionLabel: '+ Add Category',
-                  onAction: _showAddCategoryDialog,
+                    // Section: Customizable Categories
+                    _buildSectionTitle(
+                      'Event Categories',
+                      actionLabel: '+ Add Category',
+                      onAction: _showAddCategoryDialog,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildCategoriesCard(categories),
+                    const SizedBox(height: 24),
+
+                    // Section: Reminders & Alerts
+                    _buildSectionTitle('Reminders & Notifications'),
+                    const SizedBox(height: 10),
+                    _buildNotificationsCard(),
+                    const SizedBox(height: 24),
+
+                    // Section: About Chronova
+                    _buildSectionTitle('About Chronova'),
+                    const SizedBox(height: 10),
+                    _buildAboutCard(),
+                    const SizedBox(height: 32),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                _buildCategoriesCard(),
-                const SizedBox(height: 24),
-
-                // Section: Reminders & Alerts
-                _buildSectionTitle('Reminders & Notifications'),
-                const SizedBox(height: 10),
-                _buildNotificationsCard(),
-                const SizedBox(height: 24),
-
-                // Section: About Chronova
-                _buildSectionTitle('About Chronova'),
-                const SizedBox(height: 10),
-                _buildAboutCard(),
-                const SizedBox(height: 32),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -388,7 +395,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     );
   }
 
-  Widget _buildCategoriesCard() {
+  Widget _buildCategoriesCard(List<EventCategory> categories) {
     return CustomCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -402,7 +409,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _categories.map((cat) {
+            children: categories.map((cat) {
               return Chip(
                 avatar: CircleAvatar(backgroundColor: cat.color, radius: 6),
                 label: Text(
