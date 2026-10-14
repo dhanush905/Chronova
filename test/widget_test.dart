@@ -1,30 +1,54 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:chronova/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Chronova renders navigation shell and switches tabs cleanly', (
+    WidgetTester tester,
+  ) async {
+    // Set fixed surface size to prevent layout overflows during testing
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.0;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.pumpWidget(const ChronovaApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // 1. Verify Home Screen is active by default
+    expect(find.text('Welcome to Chronova'), findsOneWidget);
+    expect(find.text("Today's Schedule"), findsOneWidget);
+    expect(find.text('Priority Reminders'), findsOneWidget);
+
+    // 2. Verify all navigation labels exist
+    expect(find.text('Home'), findsWidgets);
+    expect(find.text('Calendar'), findsWidgets);
+    expect(find.text('Notes & Files'), findsWidgets);
+    expect(find.text('Profile'), findsWidgets);
+
+    // 3. Switch to Calendar Tab
+    await tester.tap(find.text('Calendar').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('All Categories'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+
+    // 4. Switch to Notes & Files Tab
+    await tester.tap(find.text('Notes & Files').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Files & Import'), findsOneWidget);
+    expect(find.text('Chronova Phase 1 UI Blueprint'), findsOneWidget);
+
+    // 5. Switch to Profile Tab
+    await tester.tap(find.text('Profile').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile & Settings'), findsOneWidget);
+    expect(find.text('Cloud & Synchronization'), findsOneWidget);
+    expect(find.text('Event Categories'), findsOneWidget);
   });
 }
