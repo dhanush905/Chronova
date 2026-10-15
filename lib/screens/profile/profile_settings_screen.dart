@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/chronova_data_store.dart';
 import '../../models/event_item.dart';
@@ -18,6 +19,48 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   bool _notificationsEnabled = true;
   bool _offlineCacheEnabled = true;
   String _selectedSnooze = '10 min';
+
+  User? get _currentUser {
+    try {
+      return Supabase.instance.client.auth.currentUser;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Sign Out'),
+        content: const Text(
+          'Are you sure you want to sign out of Chronova? Your local in-memory session will be cleared.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      ChronovaDataStore.instance.clearUserData();
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
+    }
+  }
 
   void _showAddCategoryDialog() {
     final catNameCtrl = TextEditingController();
@@ -240,69 +283,117 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   Widget _buildProfileCard() {
+    final user = _currentUser;
+    final email = user?.email ?? 'user@chronova.app';
+    final initials =
+        (user != null && user.email != null && user.email!.isNotEmpty)
+        ? user.email!.substring(0, 2).toUpperCase()
+        : 'CN';
+    final isCloud = user != null;
+
     return CustomCard(
       padding: const EdgeInsets.all(18),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primary, AppColors.catViolet],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              shape: BoxShape.circle,
-            ),
-            child: const Center(
-              child: Text(
-                'CN',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppColors.primary, AppColors.catViolet],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    initials,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isCloud ? 'Authenticated User' : 'Chronova User',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      email,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    StatusBadge(
+                      label: isCloud
+                          ? 'Supabase Cloud Connected'
+                          : 'Phase 1 • Local Sample Mode',
+                      color: isCloud ? AppColors.catEmerald : AppColors.primary,
+                      icon: isCloud
+                          ? Icons.cloud_done_rounded
+                          : Icons.shield_outlined,
+                      fontSize: 10,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Chronova User',
+          if (isCloud) ...[
+            const Divider(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('profile-sign-out-btn'),
+                onPressed: _handleSignOut,
+                icon: const Icon(
+                  Icons.logout_rounded,
+                  size: 18,
+                  color: AppColors.danger,
+                ),
+                label: const Text(
+                  'Sign Out of Chronova',
                   style: TextStyle(
-                    fontSize: 17,
+                    color: AppColors.danger,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 2),
-                const Text(
-                  'user@chronova.app',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.danger, width: 1.2),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                const SizedBox(height: 8),
-                const StatusBadge(
-                  label: 'Phase 1 • Local Sample Mode',
-                  color: AppColors.primary,
-                  icon: Icons.shield_outlined,
-                  fontSize: 10,
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildCloudSyncCard() {
+    final user = _currentUser;
+    final isCloud = user != null;
+
     return CustomCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -312,20 +403,22 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryContainer,
+                  color: isCloud
+                      ? AppColors.catEmerald.withValues(alpha: 0.12)
+                      : AppColors.primaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.cloud_sync_rounded,
-                  color: AppColors.primary,
+                child: Icon(
+                  isCloud ? Icons.cloud_done_rounded : Icons.cloud_sync_rounded,
+                  color: isCloud ? AppColors.catEmerald : AppColors.primary,
                 ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
+                  children: [
+                    const Text(
                       'Supabase Multi-Device Sync',
                       style: TextStyle(
                         fontSize: 14,
@@ -333,10 +426,12 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Scheduled for Phase 2 integration.',
-                      style: TextStyle(
+                      isCloud
+                          ? 'Connected to Mumbai Supabase instance with RLS active.'
+                          : 'Local in-memory mode or awaiting login.',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                       ),
@@ -344,9 +439,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   ],
                 ),
               ),
-              const StatusBadge(
-                label: 'Phase 2',
-                color: AppColors.catAmber,
+              StatusBadge(
+                label: isCloud ? 'Active' : 'Offline',
+                color: isCloud ? AppColors.catEmerald : AppColors.catAmber,
                 fontSize: 10,
               ),
             ],
@@ -531,26 +626,27 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   size: 20,
                 ),
               ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Chronova',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Chronova',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Version 1.0.0 (Phase 1 Baseline)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
+                    Text(
+                      'Version 2.0.0 (Phase 2 Supabase Cloud & RLS)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

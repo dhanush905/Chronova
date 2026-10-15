@@ -20,6 +20,26 @@ class EventCategory {
       color: color ?? this.color,
     );
   }
+
+  factory EventCategory.fromJson(Map<String, dynamic> json) {
+    return EventCategory(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      color: Color((json['color_value'] as num?)?.toInt() ?? 0xFF4F46E5),
+    );
+  }
+
+  Map<String, dynamic> toJson({String? userId}) {
+    final map = <String, dynamic>{
+      'id': id,
+      'name': name,
+      'color_value': color.toARGB32(),
+    };
+    if (userId != null) {
+      map['user_id'] = userId;
+    }
+    return map;
+  }
 }
 
 /// Calendar event data model for Chronova.
@@ -64,5 +84,44 @@ class EventItem {
       location: location ?? this.location,
       isCompleted: isCompleted ?? this.isCompleted,
     );
+  }
+
+  factory EventItem.fromJson(Map<String, dynamic> json) {
+    return EventItem(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String? ?? '',
+      location: json['location'] as String? ?? '',
+      startTime: DateTime.parse(json['start_time'] as String).toLocal(),
+      endTime: DateTime.parse(json['end_time'] as String).toLocal(),
+      category: EventCategory(
+        id: json['category_id'] as String? ?? 'cat-general',
+        name: json['category_name'] as String? ?? 'General',
+        color: Color((json['category_color'] as num?)?.toInt() ?? 0xFF4F46E5),
+      ),
+      isCompleted: json['is_completed'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson({String? userId}) {
+    final map = <String, dynamic>{
+      'id': id,
+      'title': title,
+      'description': description,
+      'location': location,
+      'start_time': startTime.toUtc().toIso8601String(),
+      'end_time': endTime.toUtc().toIso8601String(),
+      'category_name': category.name,
+      'category_color': category.color.toARGB32(),
+      'is_completed': isCompleted,
+    };
+    // Include category_id only if it's a valid UUID
+    if (category.id.contains('-') && category.id.length > 30) {
+      map['category_id'] = category.id;
+    }
+    if (userId != null) {
+      map['user_id'] = userId;
+    }
+    return map;
   }
 }

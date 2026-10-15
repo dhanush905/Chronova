@@ -43,4 +43,36 @@ class ReminderItem {
       snoozeCount: snoozeCount ?? this.snoozeCount,
     );
   }
+
+  factory ReminderItem.fromJson(Map<String, dynamic> json) {
+    return ReminderItem(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      dueDateTime: DateTime.parse(json['due_date_time'] as String).toLocal(),
+      categoryName: json['category_name'] as String? ?? 'General',
+      categoryColor: Color(
+        (json['category_color'] as num?)?.toInt() ?? 0xFF4F46E5,
+      ),
+      isDone: json['is_done'] as bool? ?? false,
+      hasAlarm: json['has_alarm'] as bool? ?? true,
+      snoozeCount: (json['snooze_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson({String? userId}) {
+    final map = <String, dynamic>{
+      'id': id,
+      'title': title,
+      'due_date_time': dueDateTime.toUtc().toIso8601String(),
+      'category_name': categoryName,
+      'category_color': categoryColor.toARGB32(),
+      'is_done': isDone,
+      'has_alarm': hasAlarm,
+      'snooze_count': snoozeCount,
+    };
+    if (userId != null) {
+      map['user_id'] = userId;
+    }
+    return map;
+  }
 }

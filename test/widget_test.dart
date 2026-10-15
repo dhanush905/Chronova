@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chronova/main.dart';
+import 'package:chronova/screens/main_navigation_shell.dart';
 import 'package:chronova/data/chronova_data_store.dart';
 import 'package:chronova/widgets/custom_card.dart';
 
@@ -10,7 +11,7 @@ void main() {
   });
 
   Widget buildTestableApp() {
-    return const ChronovaApp();
+    return const ChronovaApp(homeOverride: MainNavigationShell());
   }
 
   testWidgets('Chronova navigation shell renders and switches tabs cleanly', (

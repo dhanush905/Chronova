@@ -37,4 +37,32 @@ class NoteItem {
       isPinned: isPinned ?? this.isPinned,
     );
   }
+
+  factory NoteItem.fromJson(Map<String, dynamic> json) {
+    return NoteItem(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      content: json['content'] as String? ?? '',
+      folder: json['folder'] as String? ?? 'Work',
+      isPinned: json['is_pinned'] as bool? ?? false,
+      attachmentCount: (json['attachment_count'] as num?)?.toInt() ?? 0,
+      updatedAt: DateTime.parse(json['updated_at'] as String).toLocal(),
+    );
+  }
+
+  Map<String, dynamic> toJson({String? userId}) {
+    final map = <String, dynamic>{
+      'id': id,
+      'title': title,
+      'content': content,
+      'folder': folder,
+      'is_pinned': isPinned,
+      'attachment_count': attachmentCount,
+      'updated_at': updatedAt.toUtc().toIso8601String(),
+    };
+    if (userId != null) {
+      map['user_id'] = userId;
+    }
+    return map;
+  }
 }

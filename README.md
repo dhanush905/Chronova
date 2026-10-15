@@ -1,6 +1,6 @@
 # Chronova
 
-Chronova is a modern, privacy-focused cross-platform productivity application designed for Android and expandable across iOS, web, and desktop. Chronova unifies calendar events, intelligent reminders, organized notes, and multi-format document imports into a clean, unified workspace.
+Chronova is a modern, privacy-focused cross-platform productivity application designed for Android and expandable across iOS, web, and desktop. Chronova unifies calendar events, intelligent reminders, organized notes, and multi-format document imports into a clean, unified workspace backed by Supabase.
 
 ---
 
@@ -48,8 +48,9 @@ Chronova features four primary navigation destinations:
    - **Files & Import Tab**: Centralized document manager with support for CSV, PDF, Spreadsheets (.xlsx), and Images. Includes a file import preview modal to confirm detected events prior to calendar ingestion.
 
 4. **Profile & Settings**:
-   - Profile summary with sync readiness status.
-   - Cloud synchronization preview (prepared for Supabase integration in Phase 2).
+   - Profile card displaying authenticated user account email and cloud connection badge.
+   - Functional **Sign Out** flow with session cleanup.
+   - Cloud synchronization status indicator (connected to Mumbai Supabase instance with RLS active).
    - Offline caching preference switch.
    - Category management hub allowing users to create new custom-colored categories dynamically.
    - Notification and audio alarm configuration with snooze intervals.
@@ -57,33 +58,89 @@ Chronova features four primary navigation destinations:
 
 ---
 
-## 💾 State Management & Data Persistence Notice
+## ⚡ Phase 2: Supabase Cloud & Authentication Setup
 
-- **Phase 1 In-Memory Reactive Architecture**:
-  The application utilizes `ChronovaDataStore`, a unified in-memory repository implementing `ChangeNotifier`. Any event, note, category, or reminder modification made in any screen immediately notifies and updates all other screens in real time via Flutter's `ListenableBuilder`.
-- **Session Lifecycle & Persistence Limitation**:
-  In Phase 1, data persistence is in-memory only. Changes made during a session (events/notes created, edited, deleted, or categories added) persist throughout the active runtime session, but **reset to baseline sample data upon app restart**. Permanent multi-device persistence across app restarts will be introduced via Supabase (PostgreSQL & Cloud Storage) in Phase 2.
+Chronova integrates Supabase for email/password authentication, PostgreSQL data persistence, and strict Row Level Security (RLS).
+
+### 1. Database Schema & SQL Migration
+The database migrations are version-controlled under `supabase/migrations/`:
+- `supabase/migrations/20261015000000_phase2_schema_and_rls.sql`
+
+#### Applying the Migration to Supabase
+1. Open your [Supabase Dashboard](https://supabase.com/dashboard) and navigate to your project (Mumbai region).
+2. Go to the **SQL Editor** tab from the left sidebar.
+3. Click **New query**.
+4. Copy the entire contents of [`supabase/migrations/20261015000000_phase2_schema_and_rls.sql`](supabase/migrations/20261015000000_phase2_schema_and_rls.sql).
+5. Paste into the SQL Editor and click **Run**.
+6. The script creates the `categories`, `events`, `notes`, and `reminders` tables with UUID primary keys, user foreign keys linked to `auth.users(id) ON DELETE CASCADE`, indexes, auto-updating `updated_at` timestamps, and enables Row Level Security (RLS) on all tables with strict `auth.uid() = user_id` ownership policies.
 
 ---
 
-## 📂 Project Architecture
+### 2. Running Chronova with Credentials Locally
+
+Credentials are provided securely at compile-time using `--dart-define` flags. **Never hardcode, commit, or share your secret service-role key or database password.** Only use the project URL and the public `anon` publishable key.
+
+#### Exact PowerShell Command (Windows)
+
+Replace `<YOUR_SUPABASE_URL>` and `<YOUR_SUPABASE_PUBLISHABLE_KEY>` with your actual project values:
+
+```powershell
+flutter run -d chrome `
+  --dart-define=SUPABASE_URL="https://your-project-ref.supabase.co" `
+  --dart-define=SUPABASE_PUBLISHABLE_KEY="your-anon-publishable-key"
+```
+
+To run on an Android device or emulator:
+```powershell
+flutter run -d android `
+  --dart-define=SUPABASE_URL="https://your-project-ref.supabase.co" `
+  --dart-define=SUPABASE_PUBLISHABLE_KEY="your-anon-publishable-key"
+```
+
+#### Missing Configuration Handling
+If the application is launched without compile-time environment flags, Chronova does **not** crash. Instead, the `AuthGate` displays a user-friendly setup guide (`ConfigGuideScreen`) showing the exact PowerShell command and provides a one-click button to explore the app in **Local Sample Mode**.
+
+---
+
+## 💾 State Management & Persistence Layer
+
+- **Repository Pattern**:
+  `ChronovaRepository` defines the contract for categories, events, notes, and reminders.
+  - `SupabaseChronovaRepository`: Interacts asynchronously with Supabase Postgrest tables (`categories`, `events`, `notes`, `reminders`) under active RLS.
+  - `InMemoryChronovaRepository`: Provides an isolated in-memory partitioned mock for unit/widget testing and offline demonstration without requiring live network access.
+- **Unified Store (`ChronovaDataStore`)**:
+  Serves as the single source of truth for the UI layer (`ChangeNotifier`). Manages session initialization (`initializeForUser`) upon login, real-time UI notifications via `ListenableBuilder`, and complete memory wipe (`clearUserData`) upon sign out to prevent cross-account session bleed.
+
+---
+
+## 📂 Project Structure
 
 ```
 lib/
-├── main.dart                          # Application entry point with light theme
+├── main.dart                          # Application entry point with Supabase initialization & AuthGate
 ├── core/
+│   ├── config/
+│   │   └── supabase_config.dart       # Safe compile-time configuration via --dart-define
 │   └── theme/
 │       ├── app_colors.dart            # Semantic color tokens and category palettes
 │       └── app_theme.dart             # Material 3 ThemeData, CardThemeData & typography
 ├── models/
-│   ├── event_item.dart                # EventItem and customizable EventCategory models
-│   ├── reminder_item.dart             # ReminderItem with alarm and snooze state
-│   ├── note_item.dart                 # NoteItem with folder and attachment support
+│   ├── event_item.dart                # EventItem and customizable EventCategory models + JSON serialization
+│   ├── reminder_item.dart             # ReminderItem with alarm, snooze, and JSON serialization
+│   ├── note_item.dart                 # NoteItem with folder, attachment support, and JSON serialization
 │   └── file_item.dart                 # FileItem with FileTypeEnum icons & colors
 ├── data/
-│   ├── sample_data.dart               # Default baseline data
-│   └── chronova_data_store.dart       # Reactive in-memory state manager (ChangeNotifier)
+│   ├── sample_data.dart               # Baseline sample data
+│   ├── repositories/
+│   │   ├── chronova_repository.dart   # Abstract repository interface
+│   │   ├── in_memory_chronova_repository.dart # Isolated mock repository for testing & offline mode
+│   │   └── supabase_chronova_repository.dart  # Production Supabase Postgrest client implementation
+│   └── chronova_data_store.dart       # Reactive state manager & repository bridge
 ├── screens/
+│   ├── auth/
+│   │   ├── auth_gate.dart             # Session router (ConfigGuide / Auth / MainNavigationShell)
+│   │   ├── auth_screen.dart           # Email/password authentication, validation & error messages
+│   │   └── config_guide_screen.dart   # Missing-configuration guide with PowerShell commands
 │   ├── main_navigation_shell.dart     # Responsive shell (NavigationBar / NavigationRail)
 │   ├── home/
 │   │   └── home_screen.dart           # Home dashboard with tap-to-edit and live metrics
@@ -92,7 +149,7 @@ lib/
 │   ├── notes_files/
 │   │   └── notes_files_screen.dart    # Notepad tab, folder filtering & file import preview
 │   └── profile/
-│       └── profile_settings_screen.dart # Profile, category creator & preferences
+│       └── profile_settings_screen.dart # Profile, account email, cloud status & sign out
 └── widgets/
     ├── custom_card.dart               # Elevated rounded card component
     ├── event_editor_sheet.dart        # Reusable event create/edit bottom sheet
@@ -104,26 +161,16 @@ lib/
 
 ---
 
-## 🛠️ Getting Started & Testing
-
-### Prerequisites
-- [Flutter SDK](https://flutter.dev) (version ^3.11.0 / Dart 3)
-- Android Studio or VS Code with Flutter extension
-- Connected Android device, Chrome, or emulator
-
-### Run the App
-```bash
-flutter pub get
-flutter run
-```
+## 🛠️ Verification & Testing
 
 ### Static Analysis
-```bash
+```powershell
 flutter analyze
 ```
 
-### Unit & Widget Tests
-```bash
+### Unit & Widget Test Suite
+All 18 tests run completely offline without needing live credentials or active network:
+```powershell
 flutter test
 ```
 
@@ -131,6 +178,7 @@ flutter test
 
 ## 🚀 Multi-Phase Roadmap
 
-- **Phase 1 (Completed & Refined)**: UI foundation, responsive navigation shell, Material 3 light theme, unified in-memory reactive state manager, functional event create/edit/cancel/delete flows, functional notepad with folder organization, file import preview, and comprehensive test suite.
-- **Phase 2**: Supabase authentication, PostgreSQL event/notes cloud persistence, cloud file storage, and Android notification/alarm engine.
-- **Phase 3**: Offline SQLite/caching layer, real CSV/PDF/Spreadsheet file parsing engine with preview dialog, recurring event rules, and cross-platform tablet/desktop optimizations.
+- **Phase 1 (Completed & Refined)**: UI foundation, responsive navigation shell, Material 3 light theme, unified in-memory reactive state manager, functional event create/edit/cancel/delete flows, functional notepad with folder organization, file import preview, and widget tests.
+- **Phase 2 (Completed)**: Supabase integration, versioned SQL migration with RLS, email/password authentication, session restoration and sign out, repository layer with user isolation, compile-time credential handling, and automated test coverage.
+- **Phase 3 (Upcoming)**: Android notification & alarm engine with snooze action drawer, offline SQLite caching, recurring event rules.
+- **Phase 4 (Upcoming)**: Supabase Storage bucket integration for document uploads (PDF, CSV, Excel, Images).

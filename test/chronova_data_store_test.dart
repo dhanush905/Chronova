@@ -9,7 +9,7 @@ void main() {
   });
 
   group('ChronovaDataStore - Event Management', () {
-    test('creates an event successfully', () {
+    test('creates an event successfully', () async {
       final store = ChronovaDataStore.instance;
       final initialCount = store.events.length;
 
@@ -21,7 +21,7 @@ void main() {
         category: store.categories.first,
       );
 
-      store.addEvent(newEvent);
+      await store.addEvent(newEvent);
 
       expect(store.events.length, initialCount + 1);
       expect(store.events.any((e) => e.id == 'test-evt-1'), isTrue);
@@ -31,7 +31,7 @@ void main() {
       );
     });
 
-    test('updates an existing event without duplicating it', () {
+    test('updates an existing event without duplicating it', () async {
       final store = ChronovaDataStore.instance;
       final initialCount = store.events.length;
       final targetEvent = store.events.first;
@@ -41,7 +41,7 @@ void main() {
         location: 'New Remote Link',
       );
 
-      final success = store.updateEvent(updatedEvent);
+      final success = await store.updateEvent(updatedEvent);
 
       expect(success, isTrue);
       expect(store.events.length, initialCount); // No duplicate added!
@@ -50,12 +50,12 @@ void main() {
       expect(result.location, 'New Remote Link');
     });
 
-    test('deletes the correct event by id', () {
+    test('deletes the correct event by id', () async {
       final store = ChronovaDataStore.instance;
       final initialCount = store.events.length;
       final targetId = store.events.first.id;
 
-      final success = store.deleteEvent(targetId);
+      final success = await store.deleteEvent(targetId);
 
       expect(success, isTrue);
       expect(store.events.length, initialCount - 1);
@@ -64,7 +64,7 @@ void main() {
   });
 
   group('ChronovaDataStore - Note Management', () {
-    test('creates a note successfully', () {
+    test('creates a note successfully', () async {
       final store = ChronovaDataStore.instance;
       final initialCount = store.notes.length;
 
@@ -76,14 +76,14 @@ void main() {
         updatedAt: DateTime.now(),
       );
 
-      store.addNote(newNote);
+      await store.addNote(newNote);
 
       expect(store.notes.length, initialCount + 1);
       expect(store.notes.first.id, 'test-note-1');
       expect(store.notes.first.title, 'Architecture Review');
     });
 
-    test('updates an existing note and preserves identity', () {
+    test('updates an existing note and preserves identity', () async {
       final store = ChronovaDataStore.instance;
       final initialCount = store.notes.length;
       final targetNote = store.notes.first;
@@ -93,7 +93,7 @@ void main() {
         content: 'Updated body content for note.',
       );
 
-      final success = store.updateNote(updatedNote);
+      final success = await store.updateNote(updatedNote);
 
       expect(success, isTrue);
       expect(store.notes.length, initialCount); // No duplicate
@@ -102,12 +102,12 @@ void main() {
       expect(result.content, 'Updated body content for note.');
     });
 
-    test('deletes the correct note by id', () {
+    test('deletes the correct note by id', () async {
       final store = ChronovaDataStore.instance;
       final initialCount = store.notes.length;
       final targetId = store.notes.first.id;
 
-      final success = store.deleteNote(targetId);
+      final success = await store.deleteNote(targetId);
 
       expect(success, isTrue);
       expect(store.notes.length, initialCount - 1);
