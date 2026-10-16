@@ -29,12 +29,20 @@ class EventCategory {
     );
   }
 
+  static final _uuidRegex = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  static bool isValidUuid(String val) => _uuidRegex.hasMatch(val);
+
   Map<String, dynamic> toJson({String? userId}) {
     final map = <String, dynamic>{
-      'id': id,
       'name': name,
       'color_value': color.toARGB32(),
     };
+    if (isValidUuid(id)) {
+      map['id'] = id;
+    }
     if (userId != null) {
       map['user_id'] = userId;
     }
@@ -105,7 +113,6 @@ class EventItem {
 
   Map<String, dynamic> toJson({String? userId}) {
     final map = <String, dynamic>{
-      'id': id,
       'title': title,
       'description': description,
       'location': location,
@@ -115,8 +122,11 @@ class EventItem {
       'category_color': category.color.toARGB32(),
       'is_completed': isCompleted,
     };
+    if (EventCategory.isValidUuid(id)) {
+      map['id'] = id;
+    }
     // Include category_id only if it's a valid UUID
-    if (category.id.contains('-') && category.id.length > 30) {
+    if (EventCategory.isValidUuid(category.id)) {
       map['category_id'] = category.id;
     }
     if (userId != null) {

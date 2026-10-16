@@ -88,10 +88,23 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
     );
 
     if (newNote != null && mounted) {
-      ChronovaDataStore.instance.addNote(newNote);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note created successfully')),
-      );
+      try {
+        await ChronovaDataStore.instance.addNote(newNote);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Note created successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to save note: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -106,10 +119,23 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
     );
 
     if (updatedNote != null && mounted) {
-      ChronovaDataStore.instance.updateNote(updatedNote);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note updated successfully')),
-      );
+      try {
+        await ChronovaDataStore.instance.updateNote(updatedNote);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Note updated successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update note: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -141,13 +167,26 @@ class _NotesFilesScreenState extends State<NotesFilesScreen>
     );
 
     if (confirmed == true && mounted) {
-      ChronovaDataStore.instance.deleteNote(note.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Note deleted'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      try {
+        await ChronovaDataStore.instance.deleteNote(note.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Note deleted'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete note: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 

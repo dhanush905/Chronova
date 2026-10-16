@@ -59,9 +59,14 @@ class ReminderItem {
     );
   }
 
+  static final _uuidRegex = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  static bool isValidUuid(String val) => _uuidRegex.hasMatch(val);
+
   Map<String, dynamic> toJson({String? userId}) {
     final map = <String, dynamic>{
-      'id': id,
       'title': title,
       'due_date_time': dueDateTime.toUtc().toIso8601String(),
       'category_name': categoryName,
@@ -70,6 +75,9 @@ class ReminderItem {
       'has_alarm': hasAlarm,
       'snooze_count': snoozeCount,
     };
+    if (isValidUuid(id)) {
+      map['id'] = id;
+    }
     if (userId != null) {
       map['user_id'] = userId;
     }

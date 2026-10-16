@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/config/supabase_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/responsive_container.dart';
@@ -95,6 +96,74 @@ class ConfigGuideScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceVariant,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Launch Diagnostics:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              _buildDiagnosticRow(
+                                label: 'SUPABASE_URL Presence:',
+                                value: SupabaseConfig.isUrlPresent
+                                    ? 'Detected'
+                                    : 'Not found',
+                                isPositive: SupabaseConfig.isUrlPresent,
+                              ),
+                              const SizedBox(height: 4),
+                              _buildDiagnosticRow(
+                                label: 'SUPABASE_URL Validity:',
+                                value: SupabaseConfig.isUrlValid
+                                    ? 'Valid (host: ${SupabaseConfig.urlHost})'
+                                    : (SupabaseConfig.isUrlPresent
+                                          ? 'Invalid format (needs https:// & host)'
+                                          : 'Missing'),
+                                isPositive: SupabaseConfig.isUrlValid,
+                              ),
+                              const SizedBox(height: 4),
+                              _buildDiagnosticRow(
+                                label: 'Parsed Scheme & Host:',
+                                value: SupabaseConfig.isUrlPresent
+                                    ? '${SupabaseConfig.urlScheme}://${SupabaseConfig.urlHost.isNotEmpty ? SupabaseConfig.urlHost : "(no host)"}'
+                                    : '(not provided)',
+                                isPositive:
+                                    SupabaseConfig.hasValidScheme &&
+                                    SupabaseConfig.hasHost,
+                              ),
+                              const SizedBox(height: 4),
+                              _buildDiagnosticRow(
+                                label: 'Publishable Key Presence:',
+                                value: SupabaseConfig.isKeyPresent
+                                    ? 'Detected (${SupabaseConfig.keyLength} chars, ${SupabaseConfig.keyType})'
+                                    : 'Not found',
+                                isPositive: SupabaseConfig.isKeyPresent,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                SupabaseConfig.diagnosticSummary,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         const Text(
                           'Note: Never paste your secret key or database password into chat or commit it to GitHub. Only use the publishable anon key.',
                           style: TextStyle(
@@ -121,6 +190,37 @@ class ConfigGuideScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDiagnosticRow({
+    required String label,
+    required String value,
+    required bool isPositive,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isPositive ? AppColors.catEmerald : AppColors.danger,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

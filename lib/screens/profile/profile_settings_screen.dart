@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/config/supabase_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/chronova_data_store.dart';
 import '../../models/event_item.dart';
@@ -482,6 +483,28 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                     _offlineCacheEnabled = val;
                   });
                 },
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.info_outline_rounded,
+                size: 16,
+                color: AppColors.textTertiary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Active Repository: ${ChronovaDataStore.instance.isUsingSupabase ? "Supabase PostgreSQL (Cloud Active)" : "In-Memory Storage (Demo/Fallback)"}\n${SupabaseConfig.diagnosticSummary}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textTertiary,
+                    height: 1.4,
+                  ),
+                ),
               ),
             ],
           ),

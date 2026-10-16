@@ -36,6 +36,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submit() async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -234,6 +235,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
                             autocorrect: false,
+                            enabled: !_isLoading,
                             decoration: const InputDecoration(
                               labelText: 'Email Address',
                               hintText: 'name@example.com',
@@ -259,6 +261,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
+                            enabled: !_isLoading,
                             decoration: InputDecoration(
                               labelText: 'Password',
                               hintText: '••••••••',
@@ -299,6 +302,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             TextFormField(
                               controller: _confirmPasswordController,
                               obscureText: _obscurePassword,
+                              enabled: !_isLoading,
                               decoration: const InputDecoration(
                                 labelText: 'Confirm Password',
                                 hintText: '••••••••',
@@ -354,13 +358,15 @@ class _AuthScreenState extends State<AuthScreen> {
                                 ),
                               ),
                               TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _isSignUp = !_isSignUp;
-                                    _errorMessage = null;
-                                    _successMessage = null;
-                                  });
-                                },
+                                onPressed: _isLoading
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _isSignUp = !_isSignUp;
+                                          _errorMessage = null;
+                                          _successMessage = null;
+                                        });
+                                      },
                                 child: Text(
                                   _isSignUp ? 'Sign In' : 'Sign Up',
                                   style: const TextStyle(
@@ -379,7 +385,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   if (widget.onBypassToDemo != null) ...[
                     const SizedBox(height: 20),
                     TextButton.icon(
-                      onPressed: widget.onBypassToDemo,
+                      onPressed: _isLoading ? null : widget.onBypassToDemo,
                       icon: const Icon(Icons.arrow_forward_rounded, size: 16),
                       label: const Text('Continue in Local Sample Mode'),
                     ),

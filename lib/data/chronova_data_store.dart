@@ -19,9 +19,25 @@ class ChronovaDataStore extends ChangeNotifier {
   String? _currentUserId;
   bool _isLoading = false;
   String? _errorMessage;
+  String? _initializationError;
 
   ChronovaDataStore._internal() : _repository = InMemoryChronovaRepository() {
     resetToSampleData();
+  }
+
+  /// Active repository backing the store.
+  ChronovaRepository get repository => _repository;
+
+  /// Whether store is backed by the real Supabase cloud repository.
+  bool get isUsingSupabase => _repository is SupabaseChronovaRepository;
+
+  /// Holds any repository initialization error if Supabase setup failed.
+  String? get initializationError => _initializationError;
+
+  /// Records an initialization error explicitly (e.g. from main).
+  void recordInitializationError(String error) {
+    _initializationError = error;
+    notifyListeners();
   }
 
   /// Injects a repository implementation (useful for tests or switching backends).
@@ -30,16 +46,28 @@ class ChronovaDataStore extends ChangeNotifier {
   }
 
   /// Automatically configures repository according to Supabase availability.
+  /// Does NOT silently fall back if Supabase is configured; records any error.
   void setupDefaultRepository() {
     if (SupabaseConfig.isConfigured) {
       try {
         _repository = SupabaseChronovaRepository();
-      } catch (_) {
-        _repository = InMemoryChronovaRepository();
+        _initializationError = null;
+      } catch (e) {
+        _initializationError =
+            'Failed to initialize Supabase client repository: $e';
+        debugPrint(_initializationError);
+        // Do not silently mask error as a normal in-memory fallback
       }
     } else {
       _repository = InMemoryChronovaRepository();
+      _initializationError = null;
     }
+  }
+
+  /// Explicitly switches the app to Local Sample Mode (demo choice).
+  void enableLocalSampleMode() {
+    _repository = InMemoryChronovaRepository();
+    resetToSampleData();
   }
 
   final List<EventItem> _events = [];
@@ -65,6 +93,12 @@ class ChronovaDataStore extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    // Ensure we are using Supabase if configured
+    if (SupabaseConfig.isConfigured &&
+        _repository is! SupabaseChronovaRepository) {
+      setupDefaultRepository();
+    }
+
     try {
       final fetchedCategories = await _repository.fetchCategories(userId);
       final fetchedEvents = await _repository.fetchEvents(userId);
@@ -73,15 +107,9 @@ class ChronovaDataStore extends ChangeNotifier {
 
       _categories.clear();
       if (fetchedCategories.isEmpty) {
-        // Ensure baseline user categories exist in cloud
-        for (final sampleCat in SampleData.categories) {
-          try {
-            final created = await _repository.createCategory(userId, sampleCat);
-            _categories.add(created);
-          } catch (_) {
-            _categories.add(sampleCat);
-          }
-        }
+        // Provide baseline categories in memory only for UI display.
+        // DO NOT automatically write sample records to the cloud database.
+        _categories.addAll(SampleData.categories);
       } else {
         _categories.addAll(fetchedCategories);
       }
@@ -142,100 +170,149 @@ class ChronovaDataStore extends ChangeNotifier {
   // --- Event Operations ---
 
   Future<void> addEvent(EventItem event) async {
-    if (_currentUserId != null) {
-      final created = await _repository.createEvent(_currentUserId!, event);
-      _events.add(created);
-    } else {
-      _events.add(event);
+    try {
+      if (_currentUserId != null) {
+        final created = await _repository.createEvent(_currentUserId!, event);
+        _events.insert(0, created);
+      } else {
+        _events.insert(0, event);
+      }
+      _errorMessage = null;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Error saving event: $e';
+      notifyListeners();
+      rethrow;
     }
-    notifyListeners();
   }
 
   Future<bool> updateEvent(EventItem updatedEvent) async {
     final index = _events.indexWhere((e) => e.id == updatedEvent.id);
     if (index == -1) return false;
 
-    if (_currentUserId != null) {
-      final updated = await _repository.updateEvent(
-        _currentUserId!,
-        updatedEvent,
-      );
-      _events[index] = updated;
-    } else {
-      _events[index] = updatedEvent;
+    try {
+      if (_currentUserId != null) {
+        final updated = await _repository.updateEvent(
+          _currentUserId!,
+          updatedEvent,
+        );
+        _events[index] = updated;
+      } else {
+        _events[index] = updatedEvent;
+      }
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error updating event: $e';
+      notifyListeners();
+      rethrow;
     }
-    notifyListeners();
-    return true;
   }
 
   Future<bool> deleteEvent(String id) async {
     final initialCount = _events.length;
-    if (_currentUserId != null) {
-      await _repository.deleteEvent(_currentUserId!, id);
-    }
-    _events.removeWhere((e) => e.id == id);
-    if (_events.length != initialCount) {
+    try {
+      if (_currentUserId != null) {
+        await _repository.deleteEvent(_currentUserId!, id);
+      }
+      _events.removeWhere((e) => e.id == id);
+      if (_events.length != initialCount) {
+        _errorMessage = null;
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _errorMessage = 'Error deleting event: $e';
       notifyListeners();
-      return true;
+      rethrow;
     }
-    return false;
   }
 
   // --- Note Operations ---
 
   Future<void> addNote(NoteItem note) async {
-    if (_currentUserId != null) {
-      final created = await _repository.createNote(_currentUserId!, note);
-      _notes.insert(0, created);
-    } else {
-      _notes.insert(0, note);
+    try {
+      if (_currentUserId != null) {
+        final created = await _repository.createNote(_currentUserId!, note);
+        _notes.insert(0, created);
+      } else {
+        _notes.insert(0, note);
+      }
+      _errorMessage = null;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Error saving note: $e';
+      notifyListeners();
+      rethrow;
     }
-    notifyListeners();
   }
 
   Future<bool> updateNote(NoteItem updatedNote) async {
     final index = _notes.indexWhere((n) => n.id == updatedNote.id);
     if (index == -1) return false;
 
-    if (_currentUserId != null) {
-      final updated = await _repository.updateNote(
-        _currentUserId!,
-        updatedNote,
-      );
-      _notes[index] = updated;
-    } else {
-      _notes[index] = updatedNote;
+    try {
+      if (_currentUserId != null) {
+        final updated = await _repository.updateNote(
+          _currentUserId!,
+          updatedNote,
+        );
+        _notes[index] = updated;
+      } else {
+        _notes[index] = updatedNote;
+      }
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error updating note: $e';
+      notifyListeners();
+      rethrow;
     }
-    notifyListeners();
-    return true;
   }
 
   Future<bool> deleteNote(String id) async {
     final initialCount = _notes.length;
-    if (_currentUserId != null) {
-      await _repository.deleteNote(_currentUserId!, id);
-    }
-    _notes.removeWhere((n) => n.id == id);
-    if (_notes.length != initialCount) {
+    try {
+      if (_currentUserId != null) {
+        await _repository.deleteNote(_currentUserId!, id);
+      }
+      _notes.removeWhere((n) => n.id == id);
+      if (_notes.length != initialCount) {
+        _errorMessage = null;
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _errorMessage = 'Error deleting note: $e';
       notifyListeners();
-      return true;
+      rethrow;
     }
-    return false;
   }
 
   // --- Category Operations ---
 
   Future<void> addCategory(EventCategory category) async {
-    if (_currentUserId != null) {
-      final created = await _repository.createCategory(
-        _currentUserId!,
-        category,
-      );
-      _categories.add(created);
-    } else {
-      _categories.add(category);
+    try {
+      if (_currentUserId != null) {
+        final created = await _repository.createCategory(
+          _currentUserId!,
+          category,
+        );
+        _categories.add(created);
+      } else {
+        _categories.add(category);
+      }
+      _errorMessage = null;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Error creating category: $e';
+      notifyListeners();
+      rethrow;
     }
-    notifyListeners();
   }
 
   // --- Reminder Operations ---
@@ -245,11 +322,18 @@ class ChronovaDataStore extends ChangeNotifier {
     if (index != -1) {
       final item = _reminders[index];
       final updated = item.copyWith(isDone: !item.isDone);
-      if (_currentUserId != null) {
-        await _repository.updateReminder(_currentUserId!, updated);
+      try {
+        if (_currentUserId != null) {
+          await _repository.updateReminder(_currentUserId!, updated);
+        }
+        _reminders[index] = updated;
+        _errorMessage = null;
+        notifyListeners();
+      } catch (e) {
+        _errorMessage = 'Error updating reminder: $e';
+        notifyListeners();
+        rethrow;
       }
-      _reminders[index] = updated;
-      notifyListeners();
     }
   }
 }

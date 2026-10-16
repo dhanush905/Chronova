@@ -31,13 +31,26 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _addNewEvent() async {
     final newEvent = await EventEditorSheet.show(context);
     if (newEvent != null && mounted) {
-      ChronovaDataStore.instance.addEvent(newEvent);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Event scheduled successfully'),
-          backgroundColor: AppColors.primary,
-        ),
-      );
+      try {
+        await ChronovaDataStore.instance.addEvent(newEvent);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Event scheduled successfully'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to save event: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -47,13 +60,26 @@ class _HomeScreenState extends State<HomeScreen> {
       initialEvent: event,
     );
     if (updatedEvent != null && mounted) {
-      ChronovaDataStore.instance.updateEvent(updatedEvent);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Event updated successfully'),
-          backgroundColor: AppColors.primary,
-        ),
-      );
+      try {
+        await ChronovaDataStore.instance.updateEvent(updatedEvent);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Event updated successfully'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update event: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -85,33 +111,72 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirmed == true && mounted) {
-      ChronovaDataStore.instance.deleteEvent(event.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Event deleted'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      try {
+        await ChronovaDataStore.instance.deleteEvent(event.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Event deleted'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete event: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 
   Future<void> _addNewNote() async {
     final newNote = await NoteEditorSheet.show(context);
     if (newNote != null && mounted) {
-      ChronovaDataStore.instance.addNote(newNote);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note created successfully')),
-      );
+      try {
+        await ChronovaDataStore.instance.addNote(newNote);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Note created successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to save note: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 
   Future<void> _editNote(NoteItem note) async {
     final updatedNote = await NoteEditorSheet.show(context, initialNote: note);
     if (updatedNote != null && mounted) {
-      ChronovaDataStore.instance.updateNote(updatedNote);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note updated successfully')),
-      );
+      try {
+        await ChronovaDataStore.instance.updateNote(updatedNote);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Note updated successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update note: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
     }
   }
 

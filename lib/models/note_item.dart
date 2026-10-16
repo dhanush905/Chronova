@@ -50,9 +50,14 @@ class NoteItem {
     );
   }
 
+  static final _uuidRegex = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  static bool isValidUuid(String val) => _uuidRegex.hasMatch(val);
+
   Map<String, dynamic> toJson({String? userId}) {
     final map = <String, dynamic>{
-      'id': id,
       'title': title,
       'content': content,
       'folder': folder,
@@ -60,6 +65,9 @@ class NoteItem {
       'attachment_count': attachmentCount,
       'updated_at': updatedAt.toUtc().toIso8601String(),
     };
+    if (isValidUuid(id)) {
+      map['id'] = id;
+    }
     if (userId != null) {
       map['user_id'] = userId;
     }
