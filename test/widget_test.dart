@@ -257,4 +257,98 @@ void main() {
       expect(find.text('Edited Test Note Title'), findsNothing);
     },
   );
+
+  testWidgets(
+    'Reminders flow: create with validation, edit, snooze, and delete with confirmation',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(buildTestableApp());
+      await tester.pumpAndSettle();
+
+      // 1. OPEN NEW REMINDER SHEET VIA QUICK ACTIONS
+      await tester.tap(find.text('New Reminder'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('New Reminder'), findsNWidgets(2));
+      expect(find.text('Trigger Audio Alarm'), findsOneWidget);
+
+      // Verify validation triggers on empty title
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Create Reminder'));
+      await tester.pumpAndSettle();
+      expect(find.text('Please enter a reminder title'), findsOneWidget);
+
+      // Fill in title and submit
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Reminder Title'),
+        'Test Phase 3 Alarm Reminder',
+      );
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Create Reminder'));
+      await tester.pumpAndSettle();
+
+      // Scroll down HomeScreen to view Priority Reminders
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, -350),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify reminder appears on Home Screen
+      expect(find.text('Test Phase 3 Alarm Reminder'), findsOneWidget);
+
+      // 2. EDIT REMINDER
+      await tester.tap(find.text('Test Phase 3 Alarm Reminder'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit Reminder'), findsOneWidget);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Reminder Title'),
+        'Updated Alarm Reminder Title',
+      );
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Save Changes'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Updated Alarm Reminder Title'), findsOneWidget);
+      expect(find.text('Test Phase 3 Alarm Reminder'), findsNothing);
+
+      // 3. SNOOZE REMINDER VIA POPUP MENU
+      final reminderCard = find.ancestor(
+        of: find.text('Updated Alarm Reminder Title'),
+        matching: find.byType(CustomCard),
+      );
+      final reminderMore = find.descendant(
+        of: reminderCard,
+        matching: find.byIcon(Icons.more_vert_rounded),
+      );
+      await tester.tap(reminderMore);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Snooze (10m)'), findsOneWidget);
+      await tester.tap(find.text('Snooze (10m)'));
+      await tester.pumpAndSettle();
+
+      // Verify snoozed badge appears
+      expect(find.text('Snoozed 1x'), findsOneWidget);
+
+      // 4. DELETE REMINDER WITH CONFIRMATION
+      await tester.tap(reminderMore);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      // Confirm dialog appears
+      expect(find.text('Delete Reminder'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      // Verify reminder removed
+      expect(find.text('Updated Alarm Reminder Title'), findsNothing);
+    },
+  );
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../core/config/supabase_config.dart';
 import '../models/event_item.dart';
@@ -8,6 +9,7 @@ import 'repositories/chronova_repository.dart';
 import 'repositories/in_memory_chronova_repository.dart';
 import 'repositories/supabase_chronova_repository.dart';
 import 'sample_data.dart';
+import '../services/notification_service.dart';
 
 /// Single source of truth for app state, backed by ChronovaRepository (Supabase or In-Memory).
 /// Automatically notifies UI listeners on mutations and manages user session isolation.
@@ -22,7 +24,17 @@ class ChronovaDataStore extends ChangeNotifier {
   String? _initializationError;
 
   ChronovaDataStore._internal() : _repository = InMemoryChronovaRepository() {
+    _setupNotificationCallbacks();
     resetToSampleData();
+  }
+
+  void _setupNotificationCallbacks() {
+    NotificationService.instance.onReminderDone = (id) {
+      toggleReminder(id);
+    };
+    NotificationService.instance.onReminderSnoozed = (id, duration) {
+      snoozeReminder(id, duration: duration);
+    };
   }
 
   /// Active repository backing the store.
@@ -68,6 +80,7 @@ class ChronovaDataStore extends ChangeNotifier {
   void enableLocalSampleMode() {
     _repository = InMemoryChronovaRepository();
     resetToSampleData();
+    unawaited(NotificationService.instance.syncReminders(_reminders));
   }
 
   final List<EventItem> _events = [];
@@ -128,6 +141,7 @@ class ChronovaDataStore extends ChangeNotifier {
 
       _isLoading = false;
       notifyListeners();
+      unawaited(NotificationService.instance.syncReminders(_reminders));
     } catch (e) {
       _errorMessage = 'Failed to load user data: $e';
       _isLoading = false;
@@ -138,6 +152,7 @@ class ChronovaDataStore extends ChangeNotifier {
 
   /// Completely wipes in-memory cache upon user logout so records never bleed across sessions.
   void clearUserData() {
+    unawaited(NotificationService.instance.cancelAll());
     _currentUserId = null;
     _events.clear();
     _categories.clear();
@@ -317,6 +332,77 @@ class ChronovaDataStore extends ChangeNotifier {
 
   // --- Reminder Operations ---
 
+  Future<void> addReminder(ReminderItem reminder) async {
+    try {
+      if (_currentUserId != null) {
+        final created = await _repository.createReminder(
+          _currentUserId!,
+          reminder,
+        );
+        _reminders.insert(0, created);
+        unawaited(NotificationService.instance.scheduleReminder(created));
+      } else {
+        _reminders.insert(0, reminder);
+        unawaited(NotificationService.instance.scheduleReminder(reminder));
+      }
+      _errorMessage = null;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Error saving reminder: $e';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<bool> updateReminder(ReminderItem updatedReminder) async {
+    final index = _reminders.indexWhere((r) => r.id == updatedReminder.id);
+    if (index == -1) return false;
+
+    try {
+      if (_currentUserId != null) {
+        final updated = await _repository.updateReminder(
+          _currentUserId!,
+          updatedReminder,
+        );
+        _reminders[index] = updated;
+        unawaited(NotificationService.instance.scheduleReminder(updated));
+      } else {
+        _reminders[index] = updatedReminder;
+        unawaited(
+          NotificationService.instance.scheduleReminder(updatedReminder),
+        );
+      }
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error updating reminder: $e';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<bool> deleteReminder(String id) async {
+    final initialCount = _reminders.length;
+    try {
+      if (_currentUserId != null) {
+        await _repository.deleteReminder(_currentUserId!, id);
+      }
+      _reminders.removeWhere((r) => r.id == id);
+      unawaited(NotificationService.instance.cancelReminder(id));
+      if (_reminders.length != initialCount) {
+        _errorMessage = null;
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _errorMessage = 'Error deleting reminder: $e';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> toggleReminder(String id) async {
     final index = _reminders.indexWhere((r) => r.id == id);
     if (index != -1) {
@@ -327,10 +413,39 @@ class ChronovaDataStore extends ChangeNotifier {
           await _repository.updateReminder(_currentUserId!, updated);
         }
         _reminders[index] = updated;
+        if (updated.isDone) {
+          unawaited(NotificationService.instance.cancelReminder(id));
+        } else {
+          unawaited(NotificationService.instance.scheduleReminder(updated));
+        }
         _errorMessage = null;
         notifyListeners();
       } catch (e) {
         _errorMessage = 'Error updating reminder: $e';
+        notifyListeners();
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> snoozeReminder(String id, {Duration? duration}) async {
+    final index = _reminders.indexWhere((r) => r.id == id);
+    if (index != -1) {
+      final item = _reminders[index];
+      final snoozed = NotificationService.instance.calculateSnoozedReminder(
+        item,
+        customDuration: duration,
+      );
+      try {
+        if (_currentUserId != null) {
+          await _repository.updateReminder(_currentUserId!, snoozed);
+        }
+        _reminders[index] = snoozed;
+        unawaited(NotificationService.instance.scheduleReminder(snoozed));
+        _errorMessage = null;
+        notifyListeners();
+      } catch (e) {
+        _errorMessage = 'Error snoozing reminder: $e';
         notifyListeners();
         rethrow;
       }

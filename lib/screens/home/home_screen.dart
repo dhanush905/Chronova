@@ -9,9 +9,11 @@ import '../../models/file_item.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/event_editor_sheet.dart';
 import '../../widgets/note_editor_sheet.dart';
+import '../../widgets/reminder_editor_sheet.dart';
 import '../../widgets/responsive_container.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/status_badge.dart';
+import '../../services/notification_service.dart';
 
 /// Chronova Home Dashboard screen.
 class HomeScreen extends StatefulWidget {
@@ -26,6 +28,140 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   void _toggleReminder(String reminderId) {
     ChronovaDataStore.instance.toggleReminder(reminderId);
+  }
+
+  Future<void> _addNewReminder() async {
+    final newReminder = await ReminderEditorSheet.show(context);
+    if (newReminder != null && mounted) {
+      try {
+        await ChronovaDataStore.instance.addReminder(newReminder);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Reminder scheduled successfully'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to save reminder: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _editReminder(ReminderItem reminder) async {
+    final updatedReminder = await ReminderEditorSheet.show(
+      context,
+      initialReminder: reminder,
+    );
+    if (updatedReminder != null && mounted) {
+      try {
+        await ChronovaDataStore.instance.updateReminder(updatedReminder);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Reminder updated successfully'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update reminder: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _snoozeReminder(ReminderItem reminder) async {
+    try {
+      final snoozeDuration = NotificationService.instance.defaultSnoozeDuration;
+      await ChronovaDataStore.instance.snoozeReminder(
+        reminder.id,
+        duration: snoozeDuration,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Snoozed for ${snoozeDuration.inMinutes} minutes'),
+            backgroundColor: AppColors.catViolet,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to snooze reminder: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteReminder(ReminderItem reminder) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Delete Reminder',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: Text('Are you sure you want to delete "${reminder.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await ChronovaDataStore.instance.deleteReminder(reminder.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Reminder deleted'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete reminder: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _addNewEvent() async {
@@ -180,23 +316,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showQuickActionDialog(String title, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -258,8 +377,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     SectionHeader(
                       title: 'Priority Reminders',
                       subtitle: 'Upcoming notifications & alerts',
-                      actionLabel: 'View All',
-                      onAction: () => widget.onNavigateToTab?.call(1),
+                      actionLabel: '+ Add Reminder',
+                      onAction: _addNewReminder,
                     ),
                     const SizedBox(height: 8),
                     _buildRemindersList(reminders),
@@ -472,12 +591,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildActionButton(
             label: 'New Reminder',
             icon: Icons.alarm_add_rounded,
-            onTap: () {
-              _showQuickActionDialog(
-                'New Reminder',
-                'Create a reminder with custom alarm sound and snooze time.',
-              );
-            },
+            onTap: _addNewReminder,
           ),
           const SizedBox(width: 10),
           _buildActionButton(
@@ -706,6 +820,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildRemindersList(List<ReminderItem> reminders) {
+    if (reminders.isEmpty) {
+      return const CustomCard(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'No active reminders. Tap + to schedule an alert.',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Column(
       children: reminders.map((reminder) {
         final timeFormat = DateFormat('h:mm a, MMM d');
@@ -714,6 +842,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: CustomCard(
+            onTap: () => _editReminder(reminder),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
@@ -760,7 +889,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           if (reminder.hasAlarm) ...[
                             const Icon(
@@ -768,7 +900,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               size: 13,
                               color: AppColors.catViolet,
                             ),
-                            const SizedBox(width: 4),
                           ],
                           Text(
                             formattedDue,
@@ -777,16 +908,86 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: AppColors.textSecondary,
                             ),
                           ),
-                          const SizedBox(width: 8),
                           StatusBadge(
                             label: reminder.categoryName,
                             color: reminder.categoryColor,
                             fontSize: 10,
                           ),
+                          if (reminder.snoozeCount > 0)
+                            StatusBadge(
+                              label: 'Snoozed ${reminder.snoozeCount}x',
+                              color: AppColors.catViolet,
+                              fontSize: 10,
+                            ),
                         ],
                       ),
                     ],
                   ),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(
+                    Icons.more_vert_rounded,
+                    color: AppColors.textTertiary,
+                    size: 20,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  onSelected: (val) {
+                    if (val == 'snooze') {
+                      _snoozeReminder(reminder);
+                    } else if (val == 'edit') {
+                      _editReminder(reminder);
+                    } else if (val == 'delete') {
+                      _confirmDeleteReminder(reminder);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (!reminder.isDone)
+                      PopupMenuItem(
+                        value: 'snooze',
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.snooze_rounded,
+                              size: 18,
+                              color: AppColors.catViolet,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Snooze (${NotificationService.instance.defaultSnoozeDuration.inMinutes}m)',
+                            ),
+                          ],
+                        ),
+                      ),
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            size: 18,
+                            color: AppColors.danger,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Delete',
+                            style: TextStyle(color: AppColors.danger),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

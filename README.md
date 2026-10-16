@@ -69,6 +69,8 @@ Chronova is crafted around a distraction-free, modern aesthetic:
 | :--- | :--- | :--- |
 | `flutter` | SDK | Cross-platform UI toolkit |
 | `supabase_flutter` | `^2.18.3` | Supabase GoTrue Auth, Postgrest Database, & Realtime |
+| `flutter_local_notifications` | `^22.3.2` | Native Android alarms, scheduled notifications, and snooze actions |
+| `timezone` | `^0.11.2` | Timezone database and absolute timestamp conversions |
 | `intl` | `^0.20.3` | Date formatting and localization |
 | `cupertino_icons` | `^1.0.8` | Cupertino companion iconography |
 
@@ -78,7 +80,7 @@ Chronova is crafted around a distraction-free, modern aesthetic:
 
 ```text
 lib/
-├── main.dart                          # Application entry point with Supabase initialization & AuthGate
+├── main.dart                          # Application entry point with Supabase & notification initialization
 ├── core/
 │   ├── config/
 │   │   └── supabase_config.dart       # Safe compile-time configuration via --dart-define
@@ -97,6 +99,8 @@ lib/
 │   │   ├── in_memory_chronova_repository.dart # Isolated mock repository for testing & offline mode
 │   │   └── supabase_chronova_repository.dart  # Production Supabase Postgrest client implementation
 │   └── chronova_data_store.dart       # Reactive state manager & repository bridge
+├── services/
+│   └── notification_service.dart      # Native scheduled notifications, exact alarm engine, snooze & boot sync
 ├── screens/
 │   ├── auth/
 │   │   ├── auth_gate.dart             # Session router (ConfigGuide / Auth / MainNavigationShell)
@@ -104,17 +108,18 @@ lib/
 │   │   └── config_guide_screen.dart   # Missing-configuration guide with diagnostics
 │   ├── main_navigation_shell.dart     # Responsive shell (NavigationBar / NavigationRail)
 │   ├── home/
-│   │   └── home_screen.dart           # Home dashboard with tap-to-edit and live metrics
+│   │   └── home_screen.dart           # Home dashboard with interactive reminders, snooze & tap-to-edit
 │   ├── calendar/
 │   │   └── calendar_screen.dart       # Calendar, date strip, search, event creation & editing
 │   ├── notes_files/
 │   │   └── notes_files_screen.dart    # Notepad tab, folder filtering & file import preview
 │   └── profile/
-│       └── profile_settings_screen.dart # Profile, account email, cloud status & sign out
+│       └── profile_settings_screen.dart # Profile, account email, live notification permissions & snooze duration
 └── widgets/
     ├── custom_card.dart               # Elevated rounded card component
     ├── event_editor_sheet.dart        # Reusable event create/edit bottom sheet
     ├── note_editor_sheet.dart         # Reusable note create/edit bottom sheet
+    ├── reminder_editor_sheet.dart      # Reusable reminder create/edit bottom sheet with alarm toggle
     ├── responsive_container.dart      # Adaptive max-width container
     ├── section_header.dart            # Standardized section header with action link
     └── status_badge.dart              # Pill status/category badge
@@ -198,6 +203,34 @@ If the application is launched without compile-time environment flags or with ma
 
 ---
 
+## 🔔 Native Notification & Alarm Engine (Phase 3.1)
+
+Chronova provides native scheduled alarms and reminder notifications on Android via `flutter_local_notifications` and `timezone`:
+
+### Features & Architecture
+- **Deterministic 31-Bit Notification IDs**: Maps reminder UUIDs/string IDs deterministically into positive 31-bit integer identifiers (`reminderIdToNotificationId`), preventing collisions and duplicate alerts when reminders are modified or deleted.
+- **Timezone-Aware Scheduling**: Leverages `timezone/data/latest_all.dart` and `tz.local` to schedule notifications at precise local times regardless of timezone shifts.
+- **Interactive Action Buttons**:
+  - **Snooze (+Xm)**: Reschedules the notification by the user-configured snooze interval (5m, 10m, or 15m) and increments the snooze counter.
+  - **Mark as Done**: Marks the reminder completed and dismisses the notification.
+- **Boot Recovery**: Declares `ScheduledNotificationBootReceiver` in AndroidManifest to re-register scheduled notifications after a device reboot.
+- **Cross-Screen State Sync**: When a reminder is added, updated, toggled, or deleted via `ChronovaDataStore`, the store automatically coordinates with `NotificationService` to schedule or cancel notifications.
+- **Safe Web & Headless Fallback**: Automatically detects headless testing environments and non-Android platforms with `isPlatformChannelAvailable`, cleanly executing mock flows without throwing `MissingPluginException` or unhandled platform errors.
+
+### Android Permissions & Exact Alarm Configuration
+To deliver reliable alarms even when the app is in the background or killed, the Android app is configured with:
+- `android.permission.POST_NOTIFICATIONS`: Prompts the user on Android 13+ (API 33+) at runtime.
+- `android.permission.SCHEDULE_EXACT_ALARM`: Enables exact timing via Android `AlarmManager`.
+- `android.permission.USE_EXACT_ALARM`: Ensures compatibility with Android 14+ power policies for alarm applications.
+- `android.permission.RECEIVE_BOOT_COMPLETED`: Permits boot recovery of scheduled alerts.
+- `android.permission.VIBRATE`: Enables haptic alerts.
+- **Core Library Desugaring**: Configured in `android/app/build.gradle.kts` via `com.android.tools:desugar_jdk_libs:2.1.4` and Java 11 bytecode compatibility.
+
+> [!NOTE]
+> **Android 13/14+ Exact Alarm Permission**: On Android 13 and 14+, users can revoke exact alarm permissions in **Settings > Apps > Special app access > Alarms & reminders**. Chronova checks `canScheduleExactAlarms()` and falls back gracefully to `exactAllowWhileIdle` when permitted.
+
+---
+
 ## 🧪 Verification & Testing
 
 ### Static Code Analysis
@@ -207,7 +240,7 @@ flutter analyze
 ```
 
 ### Automated Unit & Widget Test Suite
-All 30 tests run completely offline without needing live credentials or active network:
+All 43 tests run completely offline without needing live credentials, native plugins, or active network:
 ```powershell
 flutter test
 ```
@@ -215,10 +248,12 @@ flutter test
 Test coverage includes:
 - Compile-time configuration validation (`SupabaseConfig`).
 - Model JSON serialization with UUID generation (`EventItem`, `NoteItem`, `ReminderItem`).
+- Deterministic 31-bit notification ID generator (`reminderIdToNotificationId`).
+- Timezone initialization, custom snooze intervals, and past-due date validation.
 - In-memory repository CRUD operations and strict user data isolation.
-- State store lifecycle, error propagation, and sample mode switching.
+- State store lifecycle, error propagation, reminder mutations, and sample mode switching.
 - Auth screen validation, password confirmation, and authentication gate routing.
-- Complete navigation shell, event management flow, and notepad CRUD flows.
+- Complete navigation shell, event management flow, notepad CRUD flows, and reminder creation/toggle flow.
 
 ---
 
@@ -226,7 +261,9 @@ Test coverage includes:
 
 - **Phase 1 (Completed & Refined)**: UI foundation, responsive navigation shell, Material 3 light theme, unified in-memory reactive state manager, functional event create/edit/cancel/delete flows, functional notepad with folder organization, file import preview, and widget tests.
 - **Phase 2 (Completed)**: Supabase integration, versioned SQL migration with RLS, email/password authentication, session restoration and sign out, repository layer with user isolation, compile-time credential handling, and automated test coverage.
-- **Phase 3 (Upcoming)**: Android notification & alarm engine with snooze action drawer, offline SQLite caching, recurring event rules.
+- **Phase 3.1 (Completed)**: Native Notification and Alarm Engine — Android local notifications, exact alarms, boot receiver persistence, interactive snooze/done actions, snooze duration customization, and full reminder CRUD with bottom sheet editor.
+- **Phase 3.2 (Upcoming)**: Offline SQLite caching with sync queue.
+- **Phase 3.3 (Upcoming)**: Recurring event rules (daily, weekly, monthly, custom RRULE).
 - **Phase 4 (Upcoming)**: Supabase Storage bucket integration for document uploads (PDF, CSV, Excel, Images).
 
 ---

@@ -4,9 +4,17 @@ import 'core/config/supabase_config.dart';
 import 'core/theme/app_theme.dart';
 import 'data/chronova_data_store.dart';
 import 'screens/auth/auth_gate.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize native alarm & notification engine
+  try {
+    await NotificationService.instance.initialize();
+  } catch (e) {
+    debugPrint('[Chronova] NotificationService init caught: $e');
+  }
 
   debugPrint(
     '[Chronova] Startup diagnostics: urlPresent=${SupabaseConfig.isUrlPresent}, urlValid=${SupabaseConfig.isUrlValid}, scheme=${SupabaseConfig.urlScheme}, host=${SupabaseConfig.urlHost}, keyPresent=${SupabaseConfig.isKeyPresent}, keyValid=${SupabaseConfig.isKeyValid}, isConfigured=${SupabaseConfig.isConfigured}',

@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/supabase_config.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/chronova_data_store.dart';
 import '../../models/event_item.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/responsive_container.dart';
 import '../../widgets/status_badge.dart';
@@ -20,6 +22,23 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   bool _notificationsEnabled = true;
   bool _offlineCacheEnabled = true;
   String _selectedSnooze = '10 min';
+  String _permissionStatusText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final defaultMinutes =
+        NotificationService.instance.defaultSnoozeDuration.inMinutes;
+    _selectedSnooze = '$defaultMinutes min';
+    NotificationService.instance.checkPermissionStatus().then((info) {
+      if (mounted) {
+        setState(() {
+          _permissionStatusText = info.description;
+          _notificationsEnabled = info.notificationsEnabled;
+        });
+      }
+    });
+  }
 
   User? get _currentUser {
     try {
@@ -555,6 +574,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     return CustomCard(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -562,8 +582,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
+                  children: [
+                    const Text(
                       'Event Reminders & Alarms',
                       style: TextStyle(
                         fontSize: 14,
@@ -571,10 +591,12 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Audio alarms with snooze notification drawer',
-                      style: TextStyle(
+                      kIsWeb
+                          ? 'Web platform • In-app alerts active'
+                          : 'Audio alarms with snooze notification drawer',
+                      style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                       ),
@@ -586,14 +608,76 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               Switch.adaptive(
                 value: _notificationsEnabled,
                 activeTrackColor: AppColors.primary,
-                onChanged: (val) {
+                onChanged: (val) async {
                   setState(() {
                     _notificationsEnabled = val;
                   });
+                  if (val) {
+                    final info = await NotificationService.instance
+                        .requestPermissions();
+                    if (mounted) {
+                      setState(() {
+                        _permissionStatusText = info.description;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(info.description),
+                          backgroundColor: info.notificationsEnabled
+                              ? AppColors.primary
+                              : AppColors.catAmber,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                    await NotificationService.instance.syncReminders(
+                      ChronovaDataStore.instance.reminders,
+                    );
+                  } else {
+                    await NotificationService.instance.cancelAll();
+                    if (mounted) {
+                      setState(() {
+                        _permissionStatusText = 'Notifications disabled';
+                      });
+                    }
+                  }
                 },
               ),
             ],
           ),
+          if (_permissionStatusText.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _notificationsEnabled
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.info_outline_rounded,
+                    size: 14,
+                    color: _notificationsEnabled
+                        ? AppColors.success
+                        : AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _permissionStatusText,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -618,6 +702,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                     setState(() {
                       _selectedSnooze = val;
                     });
+                    final minutes = int.tryParse(val.split(' ').first) ?? 10;
+                    NotificationService.instance.setDefaultSnoozeDuration(
+                      Duration(minutes: minutes),
+                    );
                   }
                 },
               ),

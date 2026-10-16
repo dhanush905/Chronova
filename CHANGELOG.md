@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.1.0] - 2026-10-16 (Phase 3.1 - Native Notification and Alarm Engine)
+
+### Added
+- **Native Notification & Alarm Engine (`NotificationService`)**:
+  - Integrated `flutter_local_notifications: ^22.3.2` and `timezone: ^0.11.2`.
+  - Implemented deterministic 31-bit integer notification ID generation (`reminderIdToNotificationId`) to map UUID strings safely without ID collision or duplicates.
+  - Added timezone-aware scheduling using `tz.TZDateTime` and `androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle`.
+  - Provided interactive notification actions: `action_snooze` ("Snooze (+Xm)") and `action_done` ("Mark as Done").
+  - Built headless/web fallback check (`isPlatformChannelAvailable`) preventing platform channel crashes during testing and non-Android execution.
+- **Android Manifest & Gradle Configuration**:
+  - Added permissions: `POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, `USE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED`, and `VIBRATE`.
+  - Registered `ScheduledNotificationBootReceiver` and `ActionBroadcastReceiver` in `AndroidManifest.xml` for post-boot alarm restoration.
+  - Enabled core library desugaring (`com.android.tools:desugar_jdk_libs:2.1.4`) and Java 11 source/target compatibility in `build.gradle.kts`.
+- **Reminder UI & Reactive State Integration**:
+  - Created `ReminderEditorSheet` modal bottom sheet matching Chronova's Indigo design system with title validation, date/time pickers, category selector, and alarm toggle.
+  - Wired "New Reminder" quick action and "+ Add Reminder" header in `HomeScreen`.
+  - Added tap-to-edit, snooze count badge, and popup actions (Snooze, Edit, Delete with confirmation dialog) in `HomeScreen`.
+  - Added live notification permission toggle and snooze interval selector (5m, 10m, 15m) in `ProfileSettingsScreen`.
+  - Wired `ChronovaDataStore` reminder mutations (`addReminder`, `updateReminder`, `deleteReminder`, `toggleReminder`, `snoozeReminder`) to synchronize with `NotificationService`.
+- **Automated Test Coverage**:
+  - Added `test/notification_service_test.dart` with 12 tests covering deterministic ID generation, snooze calculation, past-due date validation, rescheduling on time changes, boot sync, and safe degradation.
+  - Added reminder creation and toggle widget test in `test/widget_test.dart`.
+  - Expanded total automated test suite from 30 to 43 passing tests.
+
+---
+
 ## [2.0.0] - 2026-10-15 (Phase 2 - Supabase Cloud, Auth & RLS Integration)
 
 ### Added
